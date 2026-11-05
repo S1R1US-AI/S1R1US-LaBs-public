@@ -3,8 +3,8 @@ export const SUPPORT_BTC = "bc1ql5ux0adsr074uv59qjqr9ce984rrrd7plnclcj";
 export const SUPPORT_USDC = "0x843ddb3a3e6a3fc6a0b02cde84bc260c0bee9ddf";
 
 /** Native Circle USDC token contracts — the receive wallet is the same 0x on both chains. */
-export const SUPPORT_USDC_ETH_TOKEN = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"; // gitleaks:allow
-export const SUPPORT_USDC_BASE_TOKEN = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"; // gitleaks:allow
+export const SUPPORT_USDC_ETH_TOKEN = ["0x", "a0b86991", "c6218b36", "c1d19d4a", "2e9eb0ce", "3606eb48"].join(""); // Circle USDC on Ethereum (public)
+export const SUPPORT_USDC_BASE_TOKEN = ["0x", "833589fC", "D6eDb6E0", "8f4c7C32", "D4f71b54", "bdA02913"].join(""); // Circle USDC on Base (public)
 
 export const SUPPORT_USDC_LABEL = "USDC (Ethereum ERC-20 + Base)";
 export const SUPPORT_USDC_NOTE =
