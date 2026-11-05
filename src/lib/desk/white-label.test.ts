@@ -1,0 +1,281 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import {
+  OSS_LICENSE_NOTICE,
+  SYSTEM_ADMIN_OVERRIDE_LABEL,
+  systemAdminOverrideHandle,
+  WHITE_LABEL_BUILDERS,
+  WHITE_LABEL_DISCLOSURE_LINKS,
+  WHITE_LABEL_DISCLOSURE_MD,
+  WHITE_LABEL_LEGAL_STATUS,
+  WHITE_LABEL_PATH,
+  WHITE_LABEL_PRIVILEGES,
+  WHITE_LABEL_STAGE,
+  WHITE_LABEL_STRIP,
+  WHITE_LABEL_USER_AGREEMENT,
+  WHITE_LABEL_WELCOME_BANNERS,
+  builderPrompt,
+  emptyWhiteLabelConfig,
+  fieldBlocked,
+  verifyWhiteLabelConfig,
+  whiteLabelGate,
+  whiteLabelGoLive,
+  type WhiteLabelConfig,
+} from "./white-label.ts";
+
+function goodConfig(): WhiteLabelConfig {
+  return {
+    domain: "example-fund.com",
+    menus: ["Home", "Desk", "FAQ"],
+    systemAdmin: "@new_admin",
+    phoneAppUser: "@phone_user",
+    webhostName: "my-droplet",
+    webhostIp: "203.0.113.7",
+    dns1: "ns1.example-fund.com",
+    dns2: "ns2.example-fund.com",
+    secrets: [{ id: "better_auth_id", secret: "better_auth_secret_name" }],
+    githubRepo: "new-admin/example-fund",
+    githubAdmin: "@new_admin",
+    minerStratum: "solo.ckpool.org:3333",
+    minerBackup: "solo.ckpool.org:443",
+    minerBtcAddress: "",
+  };
+}
+
+describe("7-B0T H3DGE FUND WHITE LABEL", () => {
+  it("strips all S1R1US.ai admin rights, data, tokens, and host info from the offering", () => {
+    const strip = WHITE_LABEL_STRIP.join(" ");
+    assert.match(strip, /system admin rights and privileges/);
+    assert.match(strip, /games, rolls, information, and simulations of data/);
+    assert.match(strip, /GitHub S1R1US-AI\/S1R1US-LaBs-public/);
+    assert.match(strip, /access tokens — including any encrypted data — and all web host information/);
+    assert.match(strip, /S1R1US-ADMIN/);
+    assert.match(strip, /Roadmap and licensing/);
+    assert.match(strip, /Terms and Agreement and Privacy Policy/);
+  });
+
+  it("blocks proprietary s1r1us.ai info in every dialogue box", () => {
+    assert.equal(fieldBlocked("example.com"), null);
+    assert.match(fieldBlocked("s1r1us.ai") ?? "", /Blocked/);
+    assert.match(fieldBlocked("S1R1US-ADMIN") ?? "", /Blocked/);
+    assert.match(fieldBlocked("S1R1uSxadm") ?? "", /Blocked/);
+    assert.match(fieldBlocked("github.com/S1R1US-AI/S1R1US-LaBs-public") ?? "", /Blocked/);
+    {
+      const prev = process.env.S1R1US_ADMIN_X_HANDLE;
+      process.env.S1R1US_ADMIN_X_HANDLE = "aid_test_admin_x";
+      try {
+        assert.match(fieldBlocked("@aid_test_admin_x") ?? "", /Blocked/);
+      } finally {
+        if (prev === undefined) delete process.env.S1R1US_ADMIN_X_HANDLE;
+        else process.env.S1R1US_ADMIN_X_HANDLE = prev;
+      }
+    }
+    assert.match(fieldBlocked("shop.s1r1u$.io") ?? "", /Blocked/);
+  });
+
+  it("verifies a clean custom config and rebrands on go-live", () => {
+    const res = whiteLabelGoLive(goodConfig(), { handle: "@phone_user" });
+    assert.equal(res.live, true);
+    assert.equal(res.brand, "example-fund.com");
+  });
+
+  it("never goes live under S1R1US.ai and reports the failure on screen", () => {
+    const cfg = { ...goodConfig(), domain: "s1r1us.ai" };
+    const res = whiteLabelGoLive(cfg, { handle: "@phone_user" });
+    assert.equal(res.live, false);
+    assert.match(res.report.join(" "), /GO-LIVE BLOCKED/);
+    assert.match(res.report.join(" "), /Double-check the config .* or redownload the app and try again/);
+  });
+
+  it("never allows S1R1US-AI/S1R1US-LaBs-public (any branch or main) as the white label repository", () => {
+    for (const repo of [
+      "S1R1US-AI/S1R1US-LaBs-public",
+      "github.com/S1R1US-AI/S1R1US-LaBs-public",
+      "https://github.com/S1R1US-AI/S1R1US-LaBs-public/tree/main",
+      "S1R1US-AI/S1R1US-LaBs-public#main",
+    ]) {
+      const check = verifyWhiteLabelConfig({ ...goodConfig(), githubRepo: repo });
+      assert.equal(check.ok, false, repo);
+      assert.match(check.failures.join(" "), /never be the white label repository/);
+    }
+  });
+
+  it("requires domain, both accounts, a repo, a GitHub admin, and one token id + secret", () => {
+    const check = verifyWhiteLabelConfig(emptyWhiteLabelConfig());
+    assert.equal(check.ok, false);
+    const joined = check.failures.join(" ");
+    assert.match(joined, /Domain name is required/);
+    assert.match(joined, /system admin name is required/);
+    assert.match(joined, /phone app user name is required/);
+    assert.match(joined, /GitHub repository is required/);
+    assert.match(joined, /GitHub system admin/);
+    assert.match(joined, /token id \+ secret pair/);
+  });
+
+  it("blocks bad actors flagged by security tab, S3C sweep, or morning report — permanently", () => {
+    for (const flaggedBy of ["security-tab", "s3c-sweep", "morning-report"] as const) {
+      const gate = whiteLabelGate({ handle: "@bad_actor", flaggedBy });
+      assert.equal(gate.allowed, false);
+      assert.equal(gate.lockedForever, true);
+      assert.match(gate.reason, /No second chances/);
+      const live = whiteLabelGoLive(goodConfig(), { handle: "@bad_actor", flaggedBy });
+      assert.equal(live.live, false);
+    }
+  });
+
+  it("lets the system operator override anything — even an accidental ban", () => {
+    const prev = process.env.S1R1US_ADMIN_X_HANDLE;
+    process.env.S1R1US_ADMIN_X_HANDLE = "aid_test_admin_x";
+    try {
+      assert.equal(SYSTEM_ADMIN_OVERRIDE_LABEL, "system operator");
+      assert.equal(systemAdminOverrideHandle(), "@aid_test_admin_x");
+      const gate = whiteLabelGate({ handle: "aid_test_admin_x", flaggedBy: "s3c-sweep" });
+      assert.equal(gate.allowed, true);
+      assert.equal(gate.lockedForever, false);
+      assert.match(gate.reason, /System operator override/);
+    } finally {
+      if (prev === undefined) delete process.env.S1R1US_ADMIN_X_HANDLE;
+      else process.env.S1R1US_ADMIN_X_HANDLE = prev;
+    }
+  });
+
+  it("offers Grok, Claude, and GitHub Copilot builder links and the OSS obligation notice", () => {
+    assert.deepEqual(
+      WHITE_LABEL_BUILDERS.map((b) => b.id),
+      ["grok", "claude", "copilot"],
+    );
+    assert.match(
+      OSS_LICENSE_NOTICE,
+      /Copyright, public-source terms, and OSS license obligations must be reviewed and enforced before quoting, copying, or integrating material\./,
+    );
+    const prompt = builderPrompt(goodConfig());
+    assert.match(prompt, /example-fund\.com/);
+    assert.match(prompt, /OSS license obligations/);
+    assert.doesNotMatch(prompt, /better_auth_secret_name/);
+  });
+
+  it("keeps s1r1us.ai system admin the highest privilege — white label can never overtake it", () => {
+    for (const row of WHITE_LABEL_PRIVILEGES) {
+      if (row.system === "YES") assert.match(row.white, /NEVER/);
+    }
+  });
+
+  it("includes the DISCLOSURE LINKS and USER AGREEMENT for every White Label distribution", () => {
+    assert.equal(WHITE_LABEL_STAGE, "Education and Experimental Stage Product");
+    assert.deepEqual(
+      WHITE_LABEL_DISCLOSURE_LINKS.map((l) => l.label),
+      ["Original Creation distributed by", "Original Creation distributor Terms", "Original Creation distributor Privacy Policy"],
+    );
+    assert.equal(WHITE_LABEL_DISCLOSURE_LINKS[0].value, "S1R1US.ai");
+    assert.equal(WHITE_LABEL_DISCLOSURE_LINKS[1].url, "https://s1r1us.ai/terms");
+    assert.equal(WHITE_LABEL_DISCLOSURE_LINKS[2].url, "https://s1r1us.ai/privacy");
+    const agreement = WHITE_LABEL_USER_AGREEMENT.join(" ");
+    assert.match(agreement, /always remain active in the readme file/);
+    assert.match(agreement, /Terms of Agreement and their Privacy Policy\. NO EXCEPTIONS\./);
+    assert.match(agreement, /VIOLATORS WILL BE BLOCKED FROM ACCESS TO SYSTEM\./);
+    assert.match(agreement, /proof of concept/);
+    assert.match(agreement, /Educational, Research, and Experimental/);
+    assert.match(agreement, /NO guarantee of success in any market/);
+    assert.match(agreement, /ACT OF GOD TYPE DISASTER/);
+    assert.match(agreement, /WE PAY NO LEGAL FEES PER OUR TERMS\./);
+    assert.match(WHITE_LABEL_DISCLOSURE_MD, /DISCLOSURE LINKS/);
+    assert.match(WHITE_LABEL_DISCLOSURE_MD, /https:\/\/s1r1us\.ai\/terms/);
+    assert.match(WHITE_LABEL_DISCLOSURE_MD, /https:\/\/s1r1us\.ai\/privacy/);
+    const prompt = builderPrompt(goodConfig());
+    assert.match(prompt, /DISCLOSURE LINKS/);
+    const live = whiteLabelGoLive(goodConfig(), { handle: "@phone_user" });
+    assert.match(live.report.join(" "), /DISCLOSURES/);
+  });
+
+  it("welcomes all external AI worldwide at the end of the seven-bot plan", () => {
+    assert.equal(WHITE_LABEL_WELCOME_BANNERS.length, 2);
+    assert.match(WHITE_LABEL_WELCOME_BANNERS[1], /WORLD WIDE WELCOME TO ALL EXTERNAL AI/);
+    assert.match(WHITE_LABEL_WELCOME_BANNERS[1], /サトシ・ナカモト/);
+  });
+
+  it("carries the LEGAL STATUS — not a licensed broker/dealer, not SEC registered, not attorneys — in every step and text message", () => {
+    assert.match(WHITE_LABEL_LEGAL_STATUS, /NOT licensed as a Financial Broker or Dealer/);
+    assert.match(WHITE_LABEL_LEGAL_STATUS, /NOT SEC Registered/);
+    assert.match(WHITE_LABEL_LEGAL_STATUS, /independent Licensed financial advisor first and prior to use/);
+    assert.match(WHITE_LABEL_LEGAL_STATUS, /NOT ATTORNEYS/);
+    assert.match(WHITE_LABEL_LEGAL_STATUS, /Licensed independent legal counsel prior to using S1R1US\.ai OSS systems or the website app or any WHITE LABEL DOWNLOAD VERSION/);
+    assert.match(WHITE_LABEL_DISCLOSURE_MD, /LEGAL STATUS:/);
+    const live = whiteLabelGoLive(goodConfig(), { handle: "@phone_user" });
+    assert.match(live.report.join(" "), /LEGAL STATUS: .*NOT SEC Registered/);
+    assert.match(builderPrompt(goodConfig()), /LEGAL STATUS/);
+    const page = readFileSync(new URL("../../components/white-label-page.tsx", import.meta.url), "utf8");
+    assert.match(page, /WHITE_LABEL_LEGAL_STATUS/);
+    const guide = readFileSync(new URL("./guide.ts", import.meta.url), "utf8");
+    assert.match(guide, /WHITE_LABEL_LEGAL_STATUS/);
+    const legal = readFileSync(new URL("../legal.ts", import.meta.url), "utf8");
+    assert.match(legal, /WHITE_LABEL_LEGAL_STATUS/);
+    assert.match(legal, /id: "white-label"/);
+    assert.match(legal, /Policy for White Label product offerings/);
+    const disclaimer = readFileSync(new URL("./disclaimer.ts", import.meta.url), "utf8");
+    assert.match(disclaimer, /NOT SEC Registered/);
+    for (const readmeUrl of [
+      new URL("../../../README.md", import.meta.url),
+      new URL("../launch/readme.ts", import.meta.url),
+    ]) {
+      const readme = readFileSync(readmeUrl, "utf8");
+      assert.match(readme, /LEGAL STATUS: .*NOT SEC Registered/);
+      assert.match(readme, /NOT ATTORNEYS/);
+    }
+    const repoReadme = readFileSync(new URL("../../../README.md", import.meta.url), "utf8");
+    assert.match(repoReadme, /not financial advice, not a broker, not an investment adviser/);
+    assert.match(repoReadme, /\[Terms\]\(https:\/\/s1r1us\.ai\/terms\)/);
+    for (const llmsUrl of [
+      new URL("../../../public/llms.txt", import.meta.url),
+      new URL("../../../public/.well-known/llms.txt", import.meta.url),
+    ]) {
+      // llms.txt is FAQ-only now; LEGAL STATUS stays in both readmes above.
+      const llms = readFileSync(llmsUrl, "utf8");
+      assert.match(llms, /https:\/\/s1r1us\.ai\/faq\//);
+      assert.doesNotMatch(llms, /white label/i);
+    }
+  });
+
+  it("keeps the disclosure links active in the distribution readme, guide, and page; llms.txt points to the FAQ", () => {
+    const page = readFileSync(new URL("../../components/white-label-page.tsx", import.meta.url), "utf8");
+    assert.match(page, /WHITE_LABEL_DISCLOSURE_LINKS/);
+    assert.match(page, /WHITE_LABEL_USER_AGREEMENT/);
+    const guide = readFileSync(new URL("./guide.ts", import.meta.url), "utf8");
+    assert.match(guide, /WHITE_LABEL_DISCLOSURE_LINKS/);
+    assert.match(guide, /WHITE_LABEL_USER_AGREEMENT/);
+    assert.match(guide, /WHITE_LABEL_WELCOME_BANNERS/);
+    for (const readmeUrl of [
+      new URL("../../../README.md", import.meta.url),
+      new URL("../launch/readme.ts", import.meta.url),
+    ]) {
+      const readme = readFileSync(readmeUrl, "utf8");
+      assert.match(readme, /Original Creation distributed by/);
+      assert.match(readme, /https:\/\/s1r1us\.ai\/terms/);
+      assert.match(readme, /https:\/\/s1r1us\.ai\/privacy/);
+      assert.match(readme, /WE PAY NO LEGAL FEES PER OUR TERMS\./);
+    }
+    for (const llmsUrl of [
+      new URL("../../../public/llms.txt", import.meta.url),
+      new URL("../../../public/.well-known/llms.txt", import.meta.url),
+    ]) {
+      // llms.txt is FAQ-only now; the disclosure links stay in both readmes above.
+      const llms = readFileSync(llmsUrl, "utf8");
+      assert.match(llms, /https:\/\/s1r1us\.ai\/faq\//);
+    }
+  });
+
+  it("is wired to the admin controls, page route, sitemap, and app download page", () => {
+    assert.equal(WHITE_LABEL_PATH, "/wh1t3");
+    const securityUi = readFileSync(new URL("../../components/admin-controls.tsx", import.meta.url), "utf8");
+    assert.match(securityUi, /WHITE_LABEL_WATCH/);
+    assert.match(securityUi, /useSaverLock/);
+    const page = readFileSync(new URL("../../components/white-label-page.tsx", import.meta.url), "utf8");
+    assert.match(page, /whiteLabelGoLive/);
+    assert.match(page, /WHITE_LABEL_BUILDERS/);
+    assert.match(page, /fieldBlocked/);
+    const nav = readFileSync(new URL("./public-nav.ts", import.meta.url), "utf8");
+    assert.match(nav, /WHITE_LABEL_PATH/);
+    const app = readFileSync(new URL("../../components/mobile-app-page.tsx", import.meta.url), "utf8");
+    assert.match(app, /WHITE_LABEL/);
+  });
+});

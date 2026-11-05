@@ -1,0 +1,31 @@
+/* What Inspired Us: page-only styles. Reuses theme.css and global-uprisings.css; no theme or rain changes. */
+.wiu-accumulator { margin: 0.6rem 0 0; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.85rem; color: #c9a227; }
+.wiu-toc { max-width: 52rem; margin: 1.2rem auto; border: 1px solid rgba(201, 162, 39, 0.4); border-radius: 8px; padding: 0.8rem 1.1rem; background: rgba(18, 22, 25, 0.85); }
+.wiu-toc h2 { font-size: 1.05rem; margin: 0 0 0.4rem; color: #c9a227; }
+.wiu-toc ol { margin: 0; padding-left: 1.4rem; columns: 2 18rem; column-gap: 2rem; }
+.wiu-toc li { margin: 0.15rem 0; break-inside: avoid; }
+.wiu-section { max-width: 76rem; scroll-margin-top: 1rem; }
+.wiu-figure { max-width: 52rem; margin: 0.8rem 0 1rem; }
+.wiu-why { max-width: 52rem; border-left: 3px solid #c9a227; padding: 0.2rem 0 0.2rem 0.9rem; margin: 0.6rem 0 0.4rem; }
+.wiu-why h3 { margin: 0 0 0.3rem; font-size: 0.95rem; color: #c9a227; }
+.wiu-why p { margin: 0; }
+.wiu-headline { font-size: 0.98rem; margin: 0.2rem 0 0.4rem; }
+.wiu-headline a { color: inherit; }
+.wiu-leader-name { margin: 1rem 0 0.2rem; color: #c9a227; font-size: 1rem; }
+.wiu-neutral { max-width: 52rem; margin: 0.6rem 0; font-size: 0.92rem; }
+.wiu-subscribe { max-width: 52rem; margin: 1rem auto 0.4rem; text-align: center; }
+.wiu-subscribe h2 { margin: 0; font-size: 1.05rem; color: #c9a227; }
+.wiu-subscribe .gu-cta-main { margin: 0.5rem 0 0; }
+.wiu-thanks { max-width: 52rem; }
+.wiu-satire-note { max-width: 52rem; margin: 0.3rem 0 0.8rem; border: 1px solid rgba(254, 188, 46, 0.3); border-radius: 6px; }
+.wiu-nfa { margin: 0.5rem 0 0; font-size: 0.8rem; color: rgba(230, 230, 230, 0.72); }
+.wiu-byline { margin: 0.2rem 0 0.6rem; font-size: 0.85rem; color: rgba(230, 230, 230, 0.72); text-align: center; }
+.wiu-legal { max-width: 52rem; margin: 0.5rem auto; font-size: 0.78rem; color: rgba(230, 230, 230, 0.62); border: 1px solid rgba(201, 162, 39, 0.25); border-radius: 999px; padding: 0.2rem 0.75rem; width: fit-content; }
+.wiu-leaders .wiu-legal { margin: 0.3rem 0 0.6rem; }
+.wiu-vibe { max-width: 34rem; margin: 1rem 0 0.4rem; border: 1px solid rgba(201, 162, 39, 0.45); border-radius: 8px; padding: 0.7rem 0.9rem; background: rgba(18, 22, 25, 0.85); }
+.wiu-vibe h3 { margin: 0 0 0.5rem; font-size: 0.98rem; color: #c9a227; }
+.wiu-vibe-fig { margin: 0 0 0.5rem; }
+.wiu-vibe-fig img { width: 100%; height: auto; border-radius: 6px; }
+.wiu-vibe p { margin: 0.3rem 0; }
+.wiu-vibe-credit { font-size: 0.78rem; opacity: 0.8; }
+.wiu-toc-extra { margin: 0.5rem 0 0; font-size: 0.9rem; }

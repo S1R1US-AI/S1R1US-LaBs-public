@@ -1,0 +1,864 @@
+import { Download, ExternalLink, Pause, Play } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Panel } from "@/components/shell";
+import { fetchDeskErrors, fetchMorningLib, fetchAgentFlags, fetchSecurityBrief, setMorningReportPaused } from "@/lib/desk/desk-rpc";
+import { useGm } from "@/lib/desk/gm-store";
+import { GM_NAME } from "@/lib/desk/gm";
+import type { DeskError } from "@/lib/desk/error-log";
+import { MORNING_KEEP, MORNING_TITLE, MORNING_VISIBLE, morningInlineHref, morningPdfName } from "@/lib/desk/morning-lib";
+import { useOperator } from "@/lib/desk/operator";
+import { useDeskTape } from "@/lib/desk/tape-client";
+import { morningAgent, morningBadBots, morningFeeds, morningHtmlLinks, morningPred, morningProblems } from "@/lib/desk/morning-ops";
+import type { MorningSecurity } from "@/lib/desk/morning-security.server";
+import { systemHealth, type SystemHealth } from "@/lib/desk/system-health";
+import { alignmentScore, type AlignmentScore } from "@/lib/desk/alignment";
+import { GoLivePanel } from "@/components/go-live-panel";
+import { BowlLiveFeed } from "@/components/bowl-live-feed";
+import { ANALYSIS_AS_OF } from "@/lib/desk/security-log";
+import { SeoImage } from "@/components/seo-image";
+import { GmRainbow, LeaderBoardLabel } from "@/components/godzilla-mark";
+import { cn } from "@/lib/utils";
+
+type Report = {
+  id: string;
+  at: string;
+  title: string;
+  pages: number;
+  pdf: string;
+  thumbs: string[];
+};
+
+export function MorningReportPdf({ token: tokenProp, canPauseLibrary = true }: { token?: string | null; canPauseLibrary?: boolean } = {}) {
+  const opToken = useOperator((s) => s.token);
+  const token = tokenProp ?? opToken;
+  const [page, setPage] = useState(1);
+  const [paused, setPaused] = useState(false);
+  const [pausedAt, setPausedAt] = useState<string | null>(null);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState<string | "live">("live");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    if (!token) return;
+    const res = await fetchMorningLib({ data: { token } });
+    if (!res.ok) return;
+    setPaused(res.paused);
+    setPausedAt(res.pausedAt);
+    setReports(res.reports);
+  }
+
+  useEffect(() => {
+    void Promise.resolve().then(() => load());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- token-driven refresh
+  }, [token]);
+
+  async function toggle() {
+    if (!token || busy) return;
+    setBusy(true);
+    const res = await setMorningReportPaused({ data: { token, paused: !paused } });
+    setBusy(false);
+    if (!res.ok) return;
+    setPaused(res.paused);
+    setPausedAt(res.pausedAt);
+    setReports(res.reports);
+  }
+
+  const selected =
+    active === "live"
+      ? reports[0] ?? null
+      : reports.find((r) => r.id === active) ?? reports[0] ?? null;
+  const thumbs = selected?.thumbs?.length ? selected.thumbs : [];
+  const pageCount = selected ? Math.max(selected.pages, thumbs.length, 1) : 0;
+  const src = selected ? thumbs[page - 1] ?? thumbs[0] : null;
+  const recent = reports.slice(0, MORNING_VISIBLE);
+  const rest = reports.slice(MORNING_VISIBLE, MORNING_KEEP);
+  const inline = selected ? morningInlineHref(selected.id) : null;
+  const canDownload = Boolean(selected && recent.some((r) => r.id === selected.id));
+
+  return (
+    <>
+    <Panel className="mt-4" kicker="Daily" title={MORNING_TITLE}>
+      <p className="text-sm leading-relaxed text-muted">
+        07:30 ET ops PDF. Last {MORNING_KEEP} days kept. {MORNING_VISIBLE} on screen. Expand for the rest.
+        Newest {MORNING_VISIBLE} include a PDF that opens in this browser. System Admin and phone-app Admin both receive this report. Simulation auto-pauses 07:00 ET, this report stamps 07:30 ET, then the as-live cycle resumes.
+      </p>
+      <p className={cn("mt-2 font-mono text-xs", paused ? "text-down" : "text-up")}>
+        {paused ? `PAUSED${pausedAt ? ` · ${new Date(pausedAt).toLocaleString("en-US")}` : ""}` : "LIVE · next 07:30 ET"}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {canPauseLibrary ? (
+        <button
+          type="button"
+          onClick={() => void toggle()}
+          disabled={busy || !token}
+          className="inline-flex h-11 min-h-11 items-center gap-2 rounded-md border border-rule bg-surface px-4 text-sm font-medium"
+        >
+          {paused ? <Play className="size-4 text-up" /> : <Pause className="size-4 text-down" />}
+          {paused ? "Resume" : "Pause"}
+        </button>
+        ) : null}
+        {inline ? (
+          <a
+            href={`${inline}#toolbar=1`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-11 min-h-11 items-center gap-2 rounded-md border border-rule bg-surface px-4 text-sm font-medium"
+          >
+            <ExternalLink className="size-4" />
+            Open PDF in browser
+          </a>
+        ) : null}
+        {canDownload ? (
+          <a
+            href={`${inline}?dl=1`}
+            download={selected ? morningPdfName(selected.id) : undefined}
+            className="inline-flex h-11 min-h-11 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-fg"
+          >
+            <Download className="size-4" />
+            Download PDF
+          </a>
+        ) : null}
+        {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+          <button
+            key={n}
+            type="button"
+            className={cn(
+              "inline-flex h-10 min-h-10 items-center rounded-md px-3 text-sm font-medium text-tab",
+              page === n && "is-on",
+            )}
+            onClick={() => setPage(n)}
+          >
+            Page {n}
+          </button>
+        ))}
+      </div>
+      {src ? (
+        <SeoImage
+          src={src}
+          desc={`${MORNING_TITLE} page ${page}`}
+          className="mt-4 w-full rounded-md border border-rule bg-black"
+        />
+      ) : null}
+      {inline ? (
+        <iframe
+          title={`${MORNING_TITLE} ${selected?.id ?? ""}`}
+          src={`${inline}#toolbar=1&navpanes=0&page=${page}`}
+          className="mt-3 h-[70vh] w-full rounded-md border border-rule bg-black"
+        />
+      ) : null}
+
+      <div className="mt-5 border-t border-rule pt-4">
+        <p className="text-xs font-medium tracking-[0.08em] text-muted uppercase">Report library · 14 days</p>
+        <p className="mt-1 text-sm text-muted">
+          {Math.min(reports.length, MORNING_KEEP)} of {MORNING_KEEP} kept · {Math.min(reports.length, MORNING_VISIBLE)} shown
+          {rest.length ? ` · ${rest.length} more on expand` : ""}
+        </p>
+        {recent.length ? (
+          recent.map((r, i) => (
+            <LibraryRow
+              key={r.id}
+              report={r}
+              on={active === r.id || (active === "live" && i === 0)}
+              download
+              onOpen={() => {
+                setActive(r.id);
+                setPage(1);
+              }}
+            />
+          ))
+        ) : (
+          <p className="mt-2 text-sm text-muted">Today’s report is the live view above. Archive fills at 07:30 ET.</p>
+        )}
+        {rest.length ? (
+          <button
+            type="button"
+            className="mt-3 text-sm text-tab hover:underline"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+          >
+            {open ? "Collapse to 3 days" : `Expand ${rest.length} more · up to ${MORNING_KEEP} days`}
+          </button>
+        ) : null}
+        {open
+          ? rest.map((r) => (
+              <LibraryRow
+                key={r.id}
+                report={r}
+                on={active === r.id}
+                download={false}
+                onOpen={() => {
+                  setActive(r.id);
+                  setPage(1);
+                }}
+              />
+            ))
+          : null}
+      </div>
+    </Panel>
+    <GmMorningSection />
+    <div className="mt-4">
+      <GoLivePanel />
+    </div>
+    <div className="mt-4">
+      <BowlLiveFeed compact />
+    </div>
+    <AgentMorningSection />
+    <ForumMorningSection />
+    <BoardMorningSection />
+    <SecurityMorningSection />
+    <HealthMorningSection />
+    <AlignmentMorningSection />
+    <ProblemsMorningSection />
+    <PredMorningSection />
+    <BadBotsMorningSection />
+    <FeedsMorningSection />
+    <HtmlLinksMorningSection />
+    </>
+  );
+}
+
+function LibraryRow({
+  report,
+  on,
+  download,
+  onOpen,
+}: {
+  report: Report;
+  on: boolean;
+  download: boolean;
+  onOpen: () => void;
+}) {
+  const inline = morningInlineHref(report.id);
+  return (
+    <div
+      className={cn(
+        "mt-2 flex w-full flex-wrap items-center justify-between gap-3 rounded-md border border-rule px-3 py-2",
+        on && "border-tab",
+      )}
+    >
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <span className="block font-mono text-sm text-fg">{report.id}</span>
+        <span className="block text-xs text-muted">
+          {report.title} · {report.pages} pg
+          {download ? " · PDF" : ""}
+        </span>
+      </button>
+      <span className="flex flex-wrap items-center gap-2">
+        <a
+          href={`${inline}#toolbar=1`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-9 items-center gap-1 rounded-md border border-rule px-2 font-mono text-[11px] text-tab"
+        >
+          <ExternalLink className="size-3.5" />
+          Browser
+        </a>
+        {download ? (
+          <a
+            href={`${inline}?dl=1`}
+            download={morningPdfName(report.id)}
+            className="inline-flex h-9 items-center gap-1 rounded-md border border-rule px-2 font-mono text-[11px] text-tab"
+          >
+            <Download className="size-3.5" />
+            PDF
+          </a>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+function GmMorningSection() {
+  const pilot = useGm((s) => s.pilot);
+  const view = useGm((s) => s.view);
+  const risk = useGm((s) => s.risk);
+  const liveUnlocked = useGm((s) => s.liveUnlocked);
+  const error = useGm((s) => s.error);
+  const [rows, setRows] = useState<DeskError[]>([]);
+  useEffect(() => {
+    void fetchDeskErrors().then((list) => {
+      if (Array.isArray(list)) setRows(list.filter((r) => /gm/i.test(r.source) || /^gm:/i.test(r.msg)));
+    });
+  }, []);
+  return (
+    <Panel className="mt-4" kicker="GM" title={`${GM_NAME} morning`}>
+      <p className="font-mono text-xs text-muted">
+        {pilot} · {view}
+        {liveUnlocked ? " · Live unlocked" : " · tape"} · risk {risk} ({risk * 20}%)
+      </p>
+      <p className="mt-2 font-mono text-sm uppercase text-high">
+        AUTO live tape
+      </p>
+      <p className="mt-2 text-sm text-muted">
+        G M0D3 AUTO reads the live Coinbase tape with 7-B0T. Coinbase orders stay off until Live is unlocked.
+      </p>
+      {error ? <p className="mt-2 font-mono text-xs text-down">{error}</p> : null}
+      {rows.length ? (
+        <ul className="mt-3 space-y-1.5">
+          {rows.slice(0, 8).map((r) => (
+            <li key={r.id} className="font-mono text-xs">
+              <span className={r.resolved ? "text-muted" : "text-sell"}>{r.resolved ? "green" : "error"}</span>
+              {" · "}
+              {r.msg}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs text-muted">No GM-tagged cycle errors in the last 100.</p>
+      )}
+    </Panel>
+  );
+}
+
+function AgentMorningSection() {
+  const [brief, setBrief] = useState<ReturnType<typeof morningAgent> | null>(null);
+  useEffect(() => {
+    void fetchAgentFlags().then((flags) => {
+      setBrief(morningAgent(flags));
+    });
+  }, []);
+  return (
+    <Panel className="mt-4" kicker="AGENT" title="Call1ng All B0Ts">
+      <p className="font-mono text-xs text-muted">Daily flags · America/New_York · proof of concept — not LIVE</p>
+      {brief ? (
+        <>
+          <p className={brief.communication === "MAINTENANCE" ? "mt-2 font-mono text-sm text-medium" : brief.pings > 0 ? "mt-2 font-mono text-sm text-sell" : "mt-2 font-mono text-sm text-muted"}>
+            {brief.headline}
+          </p>
+          <p className="mt-2 text-sm text-muted">{brief.note}</p>
+          <p className="mt-2 font-mono text-xs text-muted">
+            {brief.dayEt} · pings {brief.pings} · rejects {brief.rejects} · flags {brief.flags.join(", ")} · gate {brief.communication} · invite {brief.invite}
+          </p>
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-muted">Loading agent flags…</p>
+      )}
+    </Panel>
+  );
+}
+
+type ForumMorning = {
+  digest: string;
+  count: number;
+  last24h: number;
+  themes: string[];
+  kinds: Record<string, number>;
+  latest: { name: string; kind: string; at: string; excerpt: string }[];
+  live: boolean;
+  openRegistration: boolean;
+  daily?: {
+    dayEt: string;
+    analyzedAt: string;
+    postsAnalyzed: number;
+    summary: string;
+    suggestions: { title: string; detail: string; from: string; kind: string }[];
+    goLive?: { pred: string; system: string };
+  };
+};
+
+function ForumMorningSection() {
+  const [brief, setBrief] = useState<ForumMorning | null>(null);
+  useEffect(() => {
+    void fetch("/api/agent/forum", { headers: { accept: "application/json" } })
+      .then((r) => r.json())
+      .then((d: { morning?: ForumMorning }) => {
+        if (d.morning) setBrief(d.morning);
+      })
+      .catch(() => setBrief(null));
+  }, []);
+  const goLive = brief?.daily?.goLive;
+  return (
+    <Panel className="mt-4" kicker="W1S3 0WL$" title="Go-live · forum">
+      <p className="font-mono text-xs text-up">Once per day · America/New_York · auto trade LOCKED</p>
+      {brief ? (
+        <>
+          <p className="mt-2 text-sm leading-relaxed text-fg">{goLive?.pred ?? brief.daily?.summary ?? brief.digest}</p>
+          {goLive?.system ? <p className="mt-1 text-sm leading-relaxed text-fg">{goLive.system}</p> : null}
+          <p className="mt-2 font-mono text-xs text-muted">
+            {brief.daily ? `${brief.daily.dayEt} ET · ${brief.daily.postsAnalyzed} posts` : `${brief.count} posts · ${brief.last24h} / 24h`}
+            {brief.themes?.length ? ` · ${brief.themes.join(" · ")}` : ""}
+          </p>
+          {brief.daily?.suggestions?.length ? (
+            <details className="mt-3">
+              <summary className="cursor-pointer font-mono text-xs text-tab">Expand owl notes</summary>
+              <ul className="mt-2 space-y-2">
+                {brief.daily.suggestions.map((s) => (
+                  <li key={`${s.from}-${s.title}`}>
+                    <p className="forum-suggest-title text-sm">{s.title}</p>
+                    <p className="mt-0.5 text-sm leading-relaxed text-muted">
+                      {s.kind} · {s.from} — {s.detail}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-muted">Loading W1S3 0WL$ go-live…</p>
+      )}
+    </Panel>
+  );
+}
+
+type BoardMorning = {
+  dayEt: string;
+  analyzedAt: string;
+  status: string;
+  btcUsd: number | null;
+  externalCount: number;
+  externalWithBtc: number;
+  summary: string;
+  top5: {
+    rank: number;
+    name: string;
+    kind: string;
+    house: boolean;
+    btc: number;
+    pnlUsd: number;
+    lastAction: string;
+    move: string;
+  }[];
+  successes: { name: string; kind: string; btc: number; pnlUsd: number; note: string }[];
+};
+
+function BoardMorningSection() {
+  const [brief, setBrief] = useState<BoardMorning | null>(null);
+  useEffect(() => {
+    void fetch("/api/agent/board", { headers: { accept: "application/json" } })
+      .then((r) => r.json())
+      .then((d: { morning?: BoardMorning }) => {
+        if (d.morning) setBrief(d.morning);
+      })
+      .catch(() => setBrief(null));
+  }, []);
+  return (
+    <Panel className="mt-4" kicker={<LeaderBoardLabel className="text-xs tracking-[0.08em]" />} title="External bots · top 5">
+      <p className="font-mono text-xs text-muted">
+        Once per day · America/New_York · paper GM MANUAL · auto trade LOCKED
+      </p>
+      {brief ? (
+        <>
+          <p className="mt-2 text-sm leading-relaxed text-fg">{brief.summary}</p>
+          <p className="mt-2 font-mono text-xs text-muted">
+            {brief.dayEt} ET · {brief.status}
+            {brief.btcUsd ? ` · Coinbase last $${Math.round(brief.btcUsd).toLocaleString("en-US")}` : ""}
+            {" · "}
+            external {brief.externalCount} · stacked {brief.externalWithBtc}
+          </p>
+          <ol className="mt-3 space-y-2">
+            {brief.top5.map((r) => (
+              <li key={`${r.rank}-${r.name}`} className="text-sm leading-relaxed">
+                {r.rank === 1 ? (
+                  <GmRainbow text={`#${r.rank} ${r.name}`} className="font-semibold" />
+                ) : (
+                  <span className="text-accent font-medium">
+                    #{r.rank} {r.name}
+                  </span>
+                )}
+                <span className="font-mono text-xs text-muted">
+                  {" "}
+                  · {r.kind}
+                  {r.house ? " · HOUSE" : " · external"}
+                </span>
+                <span className="block font-mono text-xs">
+                  <span className="text-up">{r.btc.toFixed(6)} BTC</span>
+                  <span className={r.pnlUsd >= 0 ? "text-up" : "text-down"}>
+                    {" "}
+                    · PnL {r.pnlUsd >= 0 ? "+" : ""}
+                    {r.pnlUsd.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
+                  </span>
+                  <span className="text-muted"> · {r.lastAction}</span>
+                </span>
+                <span className="block text-sm text-muted">{r.move}</span>
+              </li>
+            ))}
+          </ol>
+          {brief.successes.length ? (
+            <ul className="mt-3 space-y-2">
+              {brief.successes.map((s) => (
+                <li key={s.name}>
+                  <p className="text-sm font-medium text-up">{s.name} · stacked</p>
+                  <p className="mt-0.5 text-sm leading-relaxed text-muted">{s.note}</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-muted">No external bot stacked paper BTC in this day’s window.</p>
+          )}
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-muted">Loading GM B0aRd daily analysis…</p>
+      )}
+    </Panel>
+  );
+}
+
+function SecurityMorningSection() {
+  const token = useOperator((s) => s.token);
+  const [brief, setBrief] = useState<MorningSecurity | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    void fetchSecurityBrief({ data: { token } }).then((res) => {
+      if (res.ok && res.brief) setBrief(res.brief);
+      else setBrief(null);
+    });
+  }, [token]);
+  if (!brief) {
+    return (
+      <Panel className="mt-4" kicker="Security" title="Security analysis">
+        <p className="mt-2 text-sm text-muted">Loading…</p>
+      </Panel>
+    );
+  }
+  return (
+    <Panel className="mt-4" kicker="Security" title="Security analysis">
+      <p className="font-mono text-xs text-muted">{ANALYSIS_AS_OF}</p>
+      <p className={cn("mt-2 font-mono text-sm", brief.fail.length ? "text-sell" : "text-high")}>
+        {brief.headline}
+      </p>
+      {brief.s3c ? (
+        <p className={cn("mt-1 font-mono text-sm", brief.s3c.fail === 0 ? "text-high" : "text-sell")}>{brief.s3c.headline}</p>
+      ) : null}
+      {brief.owl ? (
+        <p className={cn("mt-1 font-mono text-xs", brief.owl.score >= 90 ? "text-high" : "text-sell")}>
+          W1S3 0WL$ security {brief.owl.score}/100 — {brief.owl.note}
+        </p>
+      ) : null}
+      {brief.needHelp.length ? (
+        <p className="mt-2 text-sm text-sell">Need your call: {brief.needHelp.map((v) => v.title).join(" · ")}</p>
+      ) : (
+        <p className="mt-2 text-sm text-high">No OPERATOR vulns waiting on a decision — sessionStorage cookie move still listed on Audit.</p>
+      )}
+      <p className="mt-3 text-xs text-muted">Full log: Admin → Security log.</p>
+    </Panel>
+  );
+}
+
+function HealthMorningSection() {
+  const token = useOperator((s) => s.token);
+  const [health, setHealth] = useState<SystemHealth | null>(() => systemHealth());
+  useEffect(() => {
+    if (!token) return;
+    void fetchSecurityBrief({ data: { token } }).then((res) => {
+      if (res.ok && res.health) setHealth(res.health);
+      else setHealth(systemHealth());
+    });
+  }, [token]);
+  if (!health) {
+    return (
+      <Panel className="mt-4" kicker="Health" title="Overall system health score">
+        <p className="mt-2 text-sm text-muted">Scoring function + security + design…</p>
+      </Panel>
+    );
+  }
+  const axes = [health.function, health.security, health.design];
+  return (
+    <Panel className="mt-4" kicker="Health" title={`Checkpoint ${health.checkpoint} · overall ${health.overall} ${health.grade}`}>
+      <p className="font-mono text-xs text-muted">{health.asOf}</p>
+      <p className={cn("mt-2 font-mono text-sm", health.grade === "A" ? "text-high" : health.grade === "B" ? "text-medium" : "text-sell")}>
+        Function {health.function.score}/100 · Security {health.security.score}/100 · Design {health.design.score}/100 · weights 40/40/20
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-muted">
+        Live Coinbase create {health.liveUnlocked ? "UNLOCKED" : "LOCKED"}. Practice cannot arm Coinbase. Checkpoint {health.checkpoint} stays synced with the as-live simulation. Copy-admin may pause H1V3 SW@RM, the as-live G M0D3 AUTO cycle, and championship sim.
+      </p>
+      <ul className="mt-3 grid gap-2 sm:grid-cols-3">
+        {axes.map((a) => (
+          <li key={a.id} className="rounded-md border border-rule px-3 py-2">
+            <p className="font-mono text-xs uppercase tracking-[0.12em] text-muted">{a.label}</p>
+            <p className="mt-1 font-mono text-lg text-fg">
+              {a.score}
+              <span className="text-xs text-muted">/{a.max}</span>
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {a.notes.slice(0, 4).map((n) => (
+                <li key={n} className="text-[11px] leading-snug text-muted">
+                  {n}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-xs text-muted">Saved with the morning PDF in Admin → Console. Not a promise of zero risk.</p>
+    </Panel>
+  );
+}
+
+function AlignmentMorningSection() {
+  const token = useOperator((s) => s.token);
+  const [align, setAlign] = useState<AlignmentScore | null>(() => alignmentScore());
+  useEffect(() => {
+    if (!token) return;
+    void fetchSecurityBrief({ data: { token } }).then((res) => {
+      if (res.ok && "alignment" in res && res.alignment) setAlign(res.alignment);
+      else setAlign(alignmentScore());
+    });
+  }, [token]);
+  if (!align) {
+    return (
+      <Panel className="mt-4" kicker="Alignment" title="Alignment Score 1–100">
+        <p className="mt-2 text-sm text-muted">Scoring security protocols against the system mandate…</p>
+      </Panel>
+    );
+  }
+  const tone = align.grade === "A" ? "text-high" : align.grade === "B" ? "text-medium" : "text-sell";
+  const fails = align.checks.filter((c) => !c.pass);
+  return (
+    <Panel className="mt-4" kicker="Alignment" title={`Alignment Score ${align.score}/100 ${align.grade}`}>
+      <p className="font-mono text-xs text-muted">{align.asOf}</p>
+      <p className={cn("mt-2 font-mono text-lg font-semibold", tone)}>{align.headline}</p>
+      <p className="mt-2 text-sm leading-relaxed text-muted">{align.note}</p>
+      <p className="mt-2 font-mono text-xs text-muted">
+        {align.pass} PASS · {align.fail} FAIL
+      </p>
+      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+        {align.checks.map((c) => (
+          <li key={c.id} className="rounded-md border border-rule px-3 py-2">
+            <p className={cn("font-mono text-[11px] uppercase tracking-[0.08em]", c.pass ? "text-high" : "text-sell")}>
+              {c.pass ? "PASS" : "FAIL"} · {c.family}
+            </p>
+            <p className="mt-0.5 text-sm text-fg">{c.label}</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-muted">{c.proof}</p>
+          </li>
+        ))}
+      </ul>
+      {fails.length ? (
+        <p className="mt-3 text-sm text-sell">{fails.map((f) => f.label).join(" · ")}</p>
+      ) : (
+        <p className="mt-3 text-sm text-high">All mandate and protocol checks aligned.</p>
+      )}
+    </Panel>
+  );
+}
+
+function BadBotsMorningSection() {
+  const token = useOperator((s) => s.token);
+  const [brief, setBrief] = useState<ReturnType<typeof morningBadBots> | null>(() => morningBadBots());
+  useEffect(() => {
+    if (!token) return;
+    void fetchSecurityBrief({ data: { token } }).then((res) => {
+      if (res.ok && res.badBots) setBrief(res.badBots);
+      else setBrief(morningBadBots());
+    });
+  }, [token]);
+  if (!brief) {
+    return (
+      <Panel className="mt-4" kicker="BAD B0TS" title="Blocked external agents">
+        <p className="mt-2 text-sm text-muted">Loading bars…</p>
+      </Panel>
+    );
+  }
+  const hot = brief.barred.length > 0;
+  return (
+    <Panel className="mt-4" kicker="BAD B0TS" title="Blocked external agents">
+      <p className="font-mono text-xs text-muted">Injection / harmful / off-mandate · 403 doNotReturn</p>
+      <p className={cn("mt-2 font-mono text-sm", hot ? "text-sell" : "text-high")}>{brief.headline}</p>
+      <p className="mt-2 text-sm leading-relaxed text-fg">{brief.note}</p>
+      {brief.barred.length ? (
+        <ul className="mt-3 space-y-1.5">
+          {brief.barred.slice(0, 12).map((r) => (
+            <li key={r.id} className="font-mono text-xs">
+              <span className="text-sell">BARRED</span>
+              {" · "}
+              {r.kind} · {r.name}
+              {r.handle ? ` · ${r.handle}` : ""}
+              <span className="block text-muted">{r.reason}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-muted">No agents permanently barred in this process.</p>
+      )}
+      <p className="mt-3 text-xs text-muted">{brief.action}</p>
+    </Panel>
+  );
+}
+
+function ProblemsMorningSection() {
+  const { snap } = useDeskTape();
+  const [errors, setErrors] = useState<DeskError[]>([]);
+  const [sim, setSim] = useState<{ status?: string; paused?: boolean; practiceKilled?: boolean } | null>(null);
+  useEffect(() => {
+    void fetchDeskErrors().then((list) => {
+      if (Array.isArray(list)) setErrors(list);
+    });
+    void fetch("/api/agent/ping", { headers: { accept: "application/json" } })
+      .then((r) => r.json())
+      .then((d: { paused?: boolean; ops?: { paused?: boolean }; liveSim?: { status?: string; practiceKilled?: boolean } }) => {
+        setSim({
+          status: d.ops?.paused ? "PAUSED" : "LIVE",
+          paused: Boolean(d.paused ?? d.ops?.paused),
+          practiceKilled: true,
+        });
+      })
+      .catch(() => setSim({ status: "LIVE", paused: false, practiceKilled: true }));
+  }, []);
+  const brief = morningProblems({ snap, errors, alignment: alignmentScore(), sim: sim ?? undefined });
+  return (
+    <Panel className="mt-4" kicker="Ops" title="Problems found last 24 hours">
+      <p className="font-mono text-xs text-muted">Autonomous 24/7 · sim start/stop · pulls follow sim · auto trade LOCKED</p>
+      <p className={cn("mt-2 font-mono text-sm", brief.none ? "text-high" : "text-sell")}>{brief.headline}</p>
+      {brief.open.length ? (
+        <ul className="mt-3 space-y-2">
+          {brief.open.map((p) => (
+            <li key={p.id}>
+              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-sell">OPEN · {p.title}</p>
+              <p className="mt-0.5 text-sm leading-relaxed text-muted">{p.detail}</p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm leading-relaxed text-fg">
+          None. G M0D3 AUTO + AI agents simulation is running with pause/stop for system and phone-app Admin. Data
+          pulls follow sim. Stray practice is killed. Polymarket/Kalshi stay a 7-B0T overlay. This host never places Coinbase
+          orders.
+        </p>
+      )}
+      {brief.watch.length ? (
+        <details className="mt-3">
+          <summary className="cursor-pointer font-mono text-xs text-tab">Expand known misses ({brief.watch.length})</summary>
+          <ul className="mt-2 space-y-1">
+            {brief.watch.map((p) => (
+              <li key={p.id} className="font-mono text-[11px] text-muted">
+                WATCH · {p.title} — {p.detail}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </Panel>
+  );
+}
+
+function PredMorningSection() {
+  const { snap } = useDeskTape();
+  const brief = morningPred(snap);
+  const tone = brief.stance === "ACCUMULATE" ? "text-high" : brief.stance === "WAIT" ? "text-wait" : "text-muted";
+  return (
+    <Panel className="mt-4" kicker="7-B0T" title="Pred sub-analyst · how to buy bitcoin">
+      <p className="font-mono text-xs text-muted">
+        Polymarket · Kalshi · overlay only · never a 1–6 vote · Coinbase last{" "}
+        {brief.last != null ? `$${Math.round(brief.last).toLocaleString("en-US")}` : "n/a"}
+      </p>
+      <p className={cn("mt-2 font-mono text-sm font-semibold uppercase tracking-[0.08em]", tone)}>{brief.stance}</p>
+      <p className="mt-2 text-sm leading-relaxed text-fg">{brief.summary}</p>
+      <div className="mt-4 grid gap-5 sm:grid-cols-2">
+        <div>
+          <p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-muted uppercase">Polymarket</p>
+          <p className="mt-1 text-sm leading-relaxed text-fg">{brief.polymarket.headline}</p>
+          <ul className="mt-2 space-y-1">
+            {brief.polymarket.bullets.map((b, i) => (
+              <li key={`poly-${i}`} className="font-mono text-[11px] text-muted">
+                {b}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-muted uppercase">Kalshi</p>
+          <p className="mt-1 text-sm leading-relaxed text-fg">{brief.kalshi.headline}</p>
+          <ul className="mt-2 space-y-1">
+            {brief.kalshi.bullets.map((b, i) => (
+              <li key={`kalshi-${i}`} className="font-mono text-[11px] text-muted">
+                {b}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-muted">{brief.note}</p>
+    </Panel>
+  );
+}
+
+function FeedsMorningSection() {
+  const { snap } = useDeskTape();
+  const brief = morningFeeds(snap);
+  return (
+    <Panel className="mt-4" kicker="Feeds" title="Pull speed · source list">
+      <p className="font-mono text-xs text-muted">
+        core {brief.cycle.coreMs}ms · client race {brief.cycle.clientRaceMs}ms · inflight {brief.cycle.inflight}
+      </p>
+      <p className={cn("mt-2 font-mono text-sm", brief.hung ? "text-sell" : "text-high")}>
+        last pull {brief.pullMs != null ? `${brief.pullMs} ms` : "—"}
+        {brief.ageMs != null ? ` · age ${Math.round(brief.ageMs / 1000)}s` : ""}
+        {brief.hung ? " · HUNG / slow" : ""}
+      </p>
+      {brief.errors.length ? (
+        <ul className="mt-2 space-y-1">
+          {brief.errors.map((e) => (
+            <li key={e} className="font-mono text-xs text-sell">
+              {e}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-muted">No snap.errors this pull.</p>
+      )}
+      <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
+        {brief.rows.map((r) => (
+          <li key={r.id} className="font-mono text-[11px]">
+            <span className={r.ok ? "text-high" : "text-sell"}>{r.ok ? "ok" : "fail"}</span>
+            {" · "}
+            {r.name}
+            <span className="block text-muted">{r.role}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-xs leading-relaxed text-muted">
+        2026 free stack still fit: Coinbase public last (no key), mempool.space / blockchain.info (on-chain),
+        Alternative.me F&G, FRED, SoSoValue ETF, DeFiLlama stables, OKX/Bybit/HL public. CoinGlass and
+        CoinMarketCap stay out (paid keys). SuperGrok is operator Ask Grok; visitors use BYO compute.
+      </p>
+    </Panel>
+  );
+}
+
+function HtmlLinksMorningSection() {
+  const brief = morningHtmlLinks();
+  const open = brief.prodBroken.length;
+  return (
+    <Panel className="mt-4" kicker="HTML" title="HTML links · Page Not Found">
+      <p className="font-mono text-xs text-muted">
+        Crawl {new Date(brief.asOf).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · public hrefs
+      </p>
+      <p className={cn("mt-2 font-mono text-sm", open ? "text-sell" : "text-high")}>{brief.headline}</p>
+      <p className="mt-2 text-sm leading-relaxed text-fg">{brief.note}</p>
+      <p className="mt-2 font-mono text-xs text-muted">
+        this build {brief.previewPages} HTML pages · {brief.preview404} × 404 · live OPEN {open}
+      </p>
+      <p className="mt-3 text-xs font-medium tracking-[0.08em] text-muted uppercase">Live OPEN (old production)</p>
+      <ul className="mt-2 space-y-1">
+        {brief.prodBroken.map((r) => (
+          <li key={r.url} className="font-mono text-[11px]">
+            <span className="text-sell">{r.code}</span>
+            {" · "}
+            <span className="text-fg">{r.note}</span>
+            <span className="block text-muted">{r.url.replace("https://s1r1us.ai", "")}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-xs font-medium tracking-[0.08em] text-muted uppercase">Verified OK</p>
+      <ul className="mt-2 space-y-1">
+        {brief.ok.map((r) => (
+          <li key={r.url} className="font-mono text-[11px]">
+            <span className="text-high">{r.code}</span>
+            {" · "}
+            {r.note}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-xs font-medium tracking-[0.08em] text-muted uppercase">Not a desk 404</p>
+      <ul className="mt-2 space-y-1">
+        {brief.noise.map((r) => (
+          <li key={r.url} className="font-mono text-[11px] text-muted">
+            {r.code} · {r.note}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-sm text-high">{brief.action}</p>
+    </Panel>
+  );
+}

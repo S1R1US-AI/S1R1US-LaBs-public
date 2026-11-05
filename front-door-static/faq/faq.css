@@ -1,0 +1,445 @@
+/* Front-door page styles.
+   Studio charcoal + matrix via parent theme. */
+@import url("/css/theme.css");
+
+.pg-kicker {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--teal);
+  font-weight: 600;
+  margin: 0 0 0.55rem;
+  text-align: center;
+}
+.pg-hero {
+  margin: 0 auto 1.5rem;
+  text-align: center;
+  max-width: 48rem;
+}
+.pg-hero h1 {
+  font-size: clamp(1.7rem, 3.6vw, 2.4rem);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0 0 0.55rem;
+}
+.pg-hero h1 .accent { color: var(--gold); }
+.pg-lede {
+  color: var(--muted);
+  font-size: 1.02rem;
+  line-height: 1.65;
+  margin: 0 auto 0.85rem;
+  max-width: 42rem;
+}
+.pg-draft-badge {
+  display: inline-block;
+  margin: 0.25rem 0 0;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(230, 179, 90, 0.55);
+  background: rgba(230, 179, 90, 0.12);
+  color: var(--warn, #e6b35a);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pg-section {
+  margin: 0 auto 1.35rem;
+  padding: 1.1rem 1.15rem 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(28, 33, 38, 0.72);
+  max-width: 48rem;
+}
+.pg-section h2 {
+  margin: 0 0 0.55rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.pg-section p, .pg-section li {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.65;
+  margin: 0 0 0.65rem;
+}
+.pg-section ul, .pg-section ol {
+  margin: 0.4rem 0 0.6rem;
+  padding-left: 1.25rem;
+}
+.pg-section a { color: var(--teal); }
+.pg-section a:hover { color: var(--gold); }
+.pg-hero-img, .pg-media {
+  display: block;
+  margin: 0.85rem auto;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #0a0c0e;
+}
+.pg-media-row {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin: 0.85rem 0 0.2rem;
+}
+.pg-media-card {
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(18, 22, 25, 0.65);
+  text-align: center;
+}
+.pg-media-card img {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  border-radius: 8px;
+}
+.pg-media-card figcaption {
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.pg-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: center;
+  margin: 1rem 0 0.25rem;
+}
+.pg-cta {
+  display: inline-block;
+  padding: 0.55rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 162, 39, 0.55);
+  background: rgba(201, 162, 39, 0.12);
+  color: var(--gold);
+  font-weight: 650;
+  font-size: 0.88rem;
+  text-decoration: none;
+}
+.pg-cta:hover { background: rgba(46, 196, 182, 0.14); border-color: var(--teal); color: var(--teal); }
+.pg-cta.secondary {
+  border-color: rgba(46, 196, 182, 0.45);
+  background: rgba(46, 196, 182, 0.1);
+  color: var(--teal);
+}
+.pg-note {
+  font-size: 0.82rem;
+  color: var(--muted-2, #7a8490);
+  line-height: 1.55;
+}
+.pg-mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+.pg-addr {
+  display: block;
+  margin: 0.35rem 0 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #0a0c0e;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: var(--gold);
+  word-break: break-all;
+}
+.pg-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.1rem;
+  justify-content: center;
+  margin: 1.5rem auto 0.5rem;
+  max-width: 48rem;
+  font-size: 0.88rem;
+}
+.pg-links a { color: var(--teal); }
+.pg-grid-2 {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin-top: 0.75rem;
+}
+.pg-stat {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(18, 22, 25, 0.55);
+}
+.pg-stat .label { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.pg-stat .value { margin-top: 0.25rem; font-size: 1.35rem; font-weight: 700; color: var(--gold); font-family: "IBM Plex Mono", monospace; }
+.pg-stat .hint { margin-top: 0.3rem; font-size: 0.75rem; color: var(--muted); }
+.pg-pre {
+  margin: 0.65rem 0 0;
+  padding: 0.75rem 0.85rem;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #0a0c0e;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+.faq-item {
+  margin: 0 auto 0.85rem;
+  padding: 0.95rem 1.05rem 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(28, 33, 38, 0.72);
+  max-width: 52rem;
+  scroll-margin-top: 5rem;
+}
+.faq-item h2 {
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.faq-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+.faq-item a { color: var(--teal); }
+.faq-toc {
+  margin: 0 auto 1.4rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(28, 33, 38, 0.55);
+  max-width: 52rem;
+}
+.faq-toc h2 { margin: 0 0 0.55rem; font-size: 0.95rem; color: var(--text); }
+.faq-toc ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  columns: 2;
+  column-gap: 1.25rem;
+}
+.faq-toc li { break-inside: avoid; margin: 0 0 0.35rem; font-size: 0.82rem; }
+.faq-toc a { color: var(--teal); text-decoration: none; }
+.faq-toc a:hover { color: var(--gold); text-decoration: underline; }
+@media (max-width: 700px) {
+  .faq-toc ul { columns: 1; }
+}
+
+/* Desk surfaces discovery strip — calm bridge to desk pages.
+   Not carbon desk-tabs / not desk-nav-fiber. Muted text · even spacing · gold underline on current. */
+.site-header { margin-bottom: 0.35rem; }
+.desk-surfaces {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem 1.05rem;
+  margin: 0 0 1.5rem;
+  padding: 0.45rem 0 0.65rem;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.desk-surfaces a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.12rem 0.05rem;
+  border-bottom: 2px solid transparent;
+  font-weight: 500;
+}
+.desk-surfaces a:hover {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom-color: rgba(201, 162, 39, 0.35);
+}
+.desk-surfaces a[aria-current="page"] {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+  font-weight: 700;
+}
+
+/* Top 5 featured FAQs (2026-10-17b): larger heading, gold card, more spacing, full-width concept image. */
+.faq-item[data-featured="top5"] {
+  margin: 0 auto 1.6rem;
+  padding: 1.35rem 1.4rem 1.45rem;
+  border: 2px solid #c9a227;
+  border-radius: calc(var(--radius) + 4px);
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.09) 0%, rgba(28, 33, 38, 0.85) 38%);
+  box-shadow: 0 0 0 1px rgba(201, 162, 39, 0.18), 0 10px 34px rgba(0, 0, 0, 0.45);
+  max-width: 64rem;
+}
+.faq-item[data-featured="top5"] h2 {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: clamp(1.2rem, 2.4vw, 1.6rem);
+  font-weight: 800;
+  color: #dbb43a;
+  margin: 0 0 0.9rem;
+}
+.faq-item[data-featured="top5"] p { font-size: 0.98rem; margin: 0 0 0.7rem; }
+.faq-item[data-featured="top5"] p:last-child { margin-bottom: 0; }
+.faq-item .faq-feature { margin: 0 0 1rem; }
+.faq-feature-img {
+  display: block;
+  width: 100%;
+  max-width: 1200px;
+  height: auto;
+  margin: 0 auto;
+  border: 1px solid rgba(201, 162, 39, 0.55);
+  border-radius: 10px;
+  background: #121619;
+}
+.faq-feature a:hover .faq-feature-img, .faq-feature a:focus-visible .faq-feature-img { border-color: #2ec4b6; }
+/* Avatar loops (2026-10-18): Meet the HUmAns <video class="s1-loop"> uses the same frame; poster = loop frame 0. */
+video.s1-loop { display: block; background: #121619; }
+/* No-JS: browsers show native controls on <video> when scripting is off; hide them so the poster stays clean (WebKit/Blink). */
+video.s1-loop::-webkit-media-controls, video.s1-loop::-webkit-media-controls-enclosure, video.s1-loop::-webkit-media-controls-overlay-play-button { display: none !important; }
+video.faq-feature-img { aspect-ratio: 1200 / 630; }
+/* Avatar loops Pause / Play toggle (WCAG 2.2.2): added by js/avatar-loops.js next to each avatar link, pinned to the video's top-right corner. */
+.s1-loop-host { position: relative; }
+.s1-loop-toggle { position: absolute; z-index: 2; width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid #c9a227; background: rgba(18, 22, 25, 0.88); color: #dbb43a; cursor: pointer; line-height: 1; }
+.s1-loop-toggle[hidden] { display: none; }
+.s1-loop-toggle::before { content: ""; display: block; width: 10px; height: 12px; border-left: 3px solid currentColor; border-right: 3px solid currentColor; box-sizing: border-box; }
+.s1-loop-toggle[data-state="paused"]::before { width: 0; height: 0; border-style: solid; border-width: 7px 0 7px 11px; border-color: transparent transparent transparent currentColor; margin-left: 3px; }
+.s1-loop-toggle--sm { width: 24px; height: 24px; border-width: 1px; }
+.s1-loop-toggle--sm::before { width: 8px; height: 9px; border-left-width: 2px; border-right-width: 2px; }
+.s1-loop-toggle--sm[data-state="paused"]::before { border-width: 5px 0 5px 8px; margin-left: 2px; }
+.s1-loop-toggle:hover { border-color: #2ec4b6; color: #2ec4b6; }
+.s1-loop-toggle:focus-visible { outline: 3px solid #2ec4b6; outline-offset: 2px; border-color: #2ec4b6; color: #2ec4b6; }
+
+/* Top 5 FAQ tiles (2026-10-18): row under the SAI Citizens United LTD header logo.
+   Same container width (52rem), 16:9 frame, border, radius and background as the logo;
+   image and title both link to the matching #anchor. Wraps on narrow screens. */
+.faq-top5 { margin: 0 auto 1.5rem; max-width: 52rem; }
+.faq-top5-h,
+.faq-top5-title {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  text-align: center;
+  color: #dbb43a;
+}
+.faq-top5-h {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 0.6rem;
+}
+.faq-top5-title {
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.faq-top5-row {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+.faq-top5-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  height: 100%;
+  color: var(--text);
+  text-decoration: none;
+}
+.faq-top5-link picture { display: block; }
+.faq-top5-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  object-position: right bottom; /* keep the lower-right © S1R1US.ai mark whole on 1200x630 art */
+  border: 1px solid rgba(201, 162, 39, 0.35);
+  border-radius: 8px;
+  background: #121619;
+}
+.faq-top5-link:hover .faq-top5-img,
+.faq-top5-link:focus-visible .faq-top5-img { border-color: var(--teal); }
+.faq-top5-link:hover .faq-top5-title,
+.faq-top5-link:focus-visible .faq-top5-title { color: var(--teal); text-decoration: underline; }
+.faq-top5-link:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; border-radius: 8px; }
+@media (max-width: 52rem) {
+  .faq-top5-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 34rem) {
+  .faq-top5-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .faq-top5-tile:last-child { grid-column: 1 / -1; justify-self: center; width: calc(50% - 0.3rem); }
+}
+
+/* Top entry: What exactly is DMT and plant Medicine? (above the logo and the Top 5 row) */
+.faq-item[data-featured="dmt-top"] {
+  max-width: 52rem;
+  margin: 0 auto 1.6rem;
+  padding: 1.35rem 1.4rem 1.45rem;
+  border: 2px solid #c9a227;
+  border-radius: calc(var(--radius) + 4px);
+  overflow: hidden;
+}
+.faq-item[data-featured="dmt-top"] h2 { font-size: 1.35rem; color: #c9a227; text-align: center; margin-bottom: 0.75rem; }
+.faq-item[data-featured="dmt-top"] .faq-dmt-figure { margin: 0 -1.4rem 0.85rem; text-align: center; }
+.faq-item[data-featured="dmt-top"] .faq-dmt-figure img { border-left: 0 !important; border-right: 0 !important; border-radius: 0 !important; }
+.faq-item[data-featured="dmt-top"] .faq-dmt-figure figcaption { padding: 0.3rem 1.4rem 0; }
+.faq-item[data-featured="dmt-top"] p { font-size: 0.98rem; }
+.faq-anchor-alias { display: block; position: relative; top: -4rem; height: 0; }
+@media (max-width: 600px) {
+  .faq-item[data-featured="dmt-top"] { padding: 1.05rem 1rem 1.15rem; }
+  .faq-item[data-featured="dmt-top"] .faq-dmt-figure { margin: 0 -1rem 0.75rem; }
+  .faq-item[data-featured="dmt-top"] .faq-dmt-figure figcaption { padding: 0.3rem 1rem 0; }
+  .faq-item[data-featured="dmt-top"] h2 { font-size: 1.15rem; }
+}
+
+/* Featured link row (DMT and Plant Medicine + Dr1pped 0ut MATR1X): slot 15, after Escape the MATRIX */
+.faq-feature2 { margin: 0 auto 1.25rem; max-width: 34rem; }
+.faq-feature2-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+.faq-feature2-img { aspect-ratio: 16 / 9; }
+.faq-feature2 .faq-top5-title { font-size: 0.82rem; }
+@media (max-width: 34rem) {
+  .faq-feature2-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .faq-feature2-row .faq-top5-tile:last-child { grid-column: auto; justify-self: stretch; width: auto; }
+}
+@media (max-width: 20rem) {
+  .faq-feature2-row { grid-template-columns: 1fr; }
+}
+
+/* Phones: long unbroken strings (addresses, URLs, paths) must wrap instead of widening the page */
+.faq-item p, .faq-item li, .faq-item code { overflow-wrap: anywhere; }
+
+/* 2026-10-18: Global Uprisings over financial inequality and surveillance (AFP blockquote + news links). */
+.faq-img-note { font-size: 0.8rem; color: var(--muted, #9aa4ad); margin-top: -0.25rem; }
+.faq-quote { margin: 0.75rem 0; padding: 0.7rem 0.9rem; border-left: 4px solid #c9a227; background: rgba(201, 162, 39, 0.08); border-radius: 0 8px 8px 0; }
+.faq-quote p { margin: 0 0 0.5rem; }
+.faq-quote .faq-quote-h { font-weight: 800; }
+.faq-quote footer { font-size: 0.8rem; color: var(--muted, #9aa4ad); overflow-wrap: anywhere; }
+.faq-news-links li { overflow-wrap: anywhere; margin: 0.25rem 0; }
+
+/* What Inspired Us top entry (#1, above DMT): same hero layout as the DMT entry. */
+.faq-item[data-featured="wiu-top"] {
+  max-width: 52rem;
+  margin: 0 auto 1.6rem;
+  padding: 1.35rem 1.4rem 1.45rem;
+  border: 2px solid #c9a227;
+  border-radius: calc(var(--radius) + 4px);
+  overflow: hidden;
+}
+.faq-item[data-featured="wiu-top"] h2 { font-size: 1.35rem; color: #c9a227; text-align: center; margin-bottom: 0.75rem; }
+.faq-item[data-featured="wiu-top"] .faq-dmt-figure { margin: 0 -1.4rem 0.85rem; text-align: center; }
+.faq-item[data-featured="wiu-top"] .faq-dmt-figure img { border-left: 0 !important; border-right: 0 !important; border-radius: 0 !important; }
+.faq-item[data-featured="wiu-top"] .faq-dmt-figure figcaption { padding: 0.3rem 1.4rem 0; }
+.faq-item[data-featured="wiu-top"] p { font-size: 0.98rem; }
+.faq-item[data-featured="wiu-top"] .faq-wiu-q { font-size: 1rem; color: #c9a227; margin: 0.9rem 0 0.25rem; }
+@media (max-width: 600px) {
+  .faq-item[data-featured="wiu-top"] { padding: 1.05rem 1rem 1.15rem; }
+  .faq-item[data-featured="wiu-top"] .faq-dmt-figure { margin: 0 -1rem 0.75rem; }
+  .faq-item[data-featured="wiu-top"] .faq-dmt-figure figcaption { padding: 0.3rem 1rem 0; }
+  .faq-item[data-featured="wiu-top"] h2 { font-size: 1.15rem; }
+}

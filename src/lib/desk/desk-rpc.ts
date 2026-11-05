@@ -1,0 +1,458 @@
+import { createServerFn } from "@tanstack/react-start";
+import { optionalXSession } from "./x-session";
+import type { LockId } from "./lock-status";
+
+export const fetchDesk = createServerFn({ method: "GET" })
+  .validator((input: { force?: boolean; token?: string } | undefined) => input ?? {})
+  .handler(async ({ data }) => {
+    const { loadSnapshot } = await import("./sources");
+    const { isTapeFrozen } = await import("./tape-persist");
+    const { forceRebuildAllowed } = await import("./auth-guards");
+    const { verifyAccessToken } = await import("./access.server");
+    const force = !isTapeFrozen() && (await forceRebuildAllowed(data, verifyAccessToken));
+    return Promise.race([
+      loadSnapshot(force),
+      new Promise<Awaited<ReturnType<typeof loadSnapshot>>>((_, reject) => {
+        setTimeout(() => reject(new Error("rpc deadline")), 2_600);
+      }),
+    ]).catch(() => loadSnapshot(false));
+  });
+
+export const fetchTapeMeta = createServerFn({ method: "GET" }).handler(async () => {
+  const { lastGoodMeta } = await import("./tape-persist");
+  return lastGoodMeta();
+});
+
+export const setTapeFreeze = createServerFn({ method: "POST" })
+  .validator((input: { token: string; frozen: boolean }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    const { setTapeFrozen, lastGoodMeta } = await import("./tape-persist");
+    if (!(await verifyAccessToken(data.token))) {
+      return { ok: false as const, error: "Admin session required", ...lastGoodMeta() };
+    }
+    setTapeFrozen(data.frozen);
+    try {
+      const { stampGoLiveNotice } = await import("./go-live-notices");
+      if (data.frozen) {
+        stampGoLiveNotice(
+          "PAUSED",
+          "Data pulls paused — under maintenance",
+          "The tape is the last validated snapshot. Do not place Coinbase orders from it. Poll GET /api/agent/ping. You will be invited when pulls resume.",
+        );
+      } else {
+        const now = new Date().toISOString();
+        const { stampInvites } = await import("./agent-waitlist");
+        const n = stampInvites(now);
+        const { noteInviteBatch } = await import("./agent-gate");
+        noteInviteBatch(n, now);
+        stampGoLiveNotice(
+          "RESUMED",
+          "Data pulls resumed",
+          "The 5-minute tape clock is back. Waitlisted bots: this is your go-live notice. Resume GET /api/agent/call every 300s. Do not treat this as live Coinbase unlock.",
+        );
+      }
+    } catch {
+      /* preview */
+    }
+    return { ok: true as const, ...lastGoodMeta() };
+  });
+
+export const rebuildDesk = createServerFn({ method: "POST" })
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    const { systemTokenOnly } = await import("./auth-guards");
+    const { loadSnapshot } = await import("./sources");
+    const { isTapeFrozen } = await import("./tape-persist");
+    if (!(await systemTokenOnly(data?.token, verifyAccessToken)) || isTapeFrozen()) {
+      return loadSnapshot(false);
+    }
+    return Promise.race([
+      loadSnapshot(true),
+      new Promise<Awaited<ReturnType<typeof loadSnapshot>>>((_, reject) => {
+        setTimeout(() => reject(new Error("rpc deadline")), 2_600);
+      }),
+    ]).catch(() => loadSnapshot(false));
+  });
+
+export const fetchDeskErrors = createServerFn({ method: "GET" }).handler(async () => {
+  const { listDeskErrors, recordDeskFails } = await import("./error-log");
+  const fs = await import("node:fs");
+  for (const p of ["/tmp/desk-errors.json", "/tmp/desk-cycle.json", `${process.cwd()}/artifacts/desk-cycle.json`]) {
+    try {
+      const raw = fs.readFileSync(p, "utf8");
+      const j = JSON.parse(raw) as { rows?: { msg: string; at?: string }[]; stats?: { fails?: string[] } };
+      if (Array.isArray(j.rows) && j.rows.length) recordDeskFails(j.rows.map((r) => r.msg), j.rows[0]?.at);
+      if (j.stats?.fails?.length) recordDeskFails(j.stats.fails);
+    } catch {
+      /* missing */
+    }
+  }
+  return listDeskErrors();
+});
+
+export const fetchSecurityBrief = createServerFn({ method: "POST" })
+  .middleware([optionalXSession])
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { requireAdminData } = await import("./admin-gate.server");
+    if (!(await requireAdminData(data.token))) return { ok: false as const, brief: null, badBots: null, health: null, alignment: null };
+    const { morningBadBots } = await import("./morning-ops");
+    const { morningSecurity } = await import("./morning-security.server");
+    const { systemHealth } = await import("./system-health");
+    const { alignmentScore } = await import("./alignment");
+    const { listAgentBars } = await import("./agent-bar");
+    const bars = listAgentBars();
+    return {
+      ok: true as const,
+      brief: morningSecurity(),
+      health: systemHealth(),
+      alignment: alignmentScore(),
+      badBots: morningBadBots({
+        barred: bars.rows.map((r) => ({
+          id: r.id,
+          at: r.at,
+          name: r.name,
+          handle: r.handle,
+          kind: r.kind,
+          ip: r.ip,
+          reason: r.reason,
+        })),
+      }),
+    };
+  });
+
+export const fetchAgentFlags = createServerFn({ method: "GET" }).handler(async () => {
+  const { peekAgentFlags } = await import("./agent-ping");
+  const { agentGatePublic, peekAgentGate } = await import("./agent-gate");
+  const flags = peekAgentFlags();
+  const gate = peekAgentGate();
+  return { ...flags, gate: agentGatePublic(), communication: gate.externalAgents ? ("OPEN" as const) : ("MAINTENANCE" as const) };
+});
+
+export const fetchAgentGate = createServerFn({ method: "POST" })
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    if (!(await verifyAccessToken(data.token))) {
+      return { ok: false as const, error: "Admin session required", gate: null, waitlist: { count: 0, invited: 0, rows: [] }, bars: { count: 0, rows: [] } };
+    }
+    const { peekAgentGate, agentGatePublic } = await import("./agent-gate");
+    const { waitlistAdmin } = await import("./agent-waitlist");
+    const { listAgentBars } = await import("./agent-bar");
+    return {
+      ok: true as const,
+      error: null as string | null,
+      gate: { ...peekAgentGate(), public: agentGatePublic() },
+      waitlist: waitlistAdmin(),
+      bars: listAgentBars(),
+    };
+  });
+
+export const setAgentGate = createServerFn({ method: "POST" })
+  .validator((input: { token: string; open: boolean }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    if (!(await verifyAccessToken(data.token))) {
+      return { ok: false as const, error: "Admin session required", gate: null, waitlist: { count: 0, invited: 0, rows: [] }, bars: { count: 0, rows: [] } };
+    }
+    const { setAgentComm, peekAgentGate, agentGatePublic } = await import("./agent-gate");
+    const { waitlistAdmin } = await import("./agent-waitlist");
+    const { listAgentBars } = await import("./agent-bar");
+    setAgentComm(data.open);
+    return {
+      ok: true as const,
+      error: null as string | null,
+      gate: { ...peekAgentGate(), public: agentGatePublic() },
+      waitlist: waitlistAdmin(),
+      bars: listAgentBars(),
+    };
+  });
+
+export const unbarAgent = createServerFn({ method: "POST" })
+  .validator((input: { token: string; id: string }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    if (!(await verifyAccessToken(data.token))) {
+      return { ok: false as const, error: "Admin session required", bars: { count: 0, rows: [] } };
+    }
+    const { unbarAgent: drop } = await import("./agent-bar");
+    return { ok: true as const, error: null as string | null, bars: drop(data.id) };
+  });
+
+
+export const fetchMorningLib = createServerFn({ method: "POST" })
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    const system = await verifyAccessToken(data.token);
+    const { verifyAppAdminToken } = await import("./app-admin");
+    const copy = verifyAppAdminToken(data.token);
+    if (!system && !copy) return { ok: false as const, paused: true, pausedAt: null, reports: [] };
+    const { getMorningLib } = await import("./morning-lib.server");
+    const lib = await getMorningLib();
+    return { ok: true as const, ...lib, role: system ? ("system" as const) : ("app-admin" as const) };
+  });
+
+export const setMorningReportPaused = createServerFn({ method: "POST" })
+  .validator((input: { token: string; paused: boolean }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    if (!(await verifyAccessToken(data.token))) return { ok: false as const, paused: true, pausedAt: null, reports: [] };
+    const { setMorningPaused } = await import("./morning-lib.server");
+    const lib = await setMorningPaused(data.paused);
+    return { ok: true as const, ...lib };
+  });
+
+export const postPracticePulse = createServerFn({ method: "POST" })
+  .validator((input: {
+    token: string;
+    at: string;
+    paused: boolean;
+    day: number;
+    bot7: { fills: number; ticks: number; cash: number; btc: number; last: string };
+    gm: { fills: number; ticks: number; cash: number; btc: number; last: string };
+  }) => input)
+  .handler(async ({ data }) => {
+    const { systemTokenOnly } = await import("./auth-guards");
+    const { verifyAccessToken } = await import("./access.server");
+    if (!(await systemTokenOnly(data?.token, verifyAccessToken))) {
+      return { ok: false as const, error: "System admin session required" };
+    }
+    const { token: _token, ...pulse } = data;
+    const { writePulse } = await import("./practice-pulse");
+    await writePulse(pulse);
+    return { ok: true as const };
+  });
+
+export const fetchPracticePulse = createServerFn({ method: "GET" }).handler(async () => {
+  const { loadPulse } = await import("./practice-pulse");
+  return loadPulse();
+});
+
+export const fetchAuto24h = createServerFn({ method: "GET" }).handler(async () => {
+  const { readAuto24h } = await import("./auto-24h.server");
+  return readAuto24h();
+});
+
+export const fetchGmBoard = createServerFn({ method: "POST" })
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    if (!(await verifyAccessToken(data.token))) {
+      return { ok: false as const, error: "Admin session required", board: null };
+    }
+    const { boardAdmin } = await import("./gm-board");
+    return { ok: true as const, error: null as string | null, board: boardAdmin() };
+  });
+
+export const setGmBoardStatus = createServerFn({ method: "POST" })
+  .validator((input: { token: string; status: "LIVE" | "PAUSED" }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    if (!(await verifyAccessToken(data.token))) {
+      return { ok: false as const, error: "Admin session required", board: null };
+    }
+    const next = data.status === "LIVE" ? ("LIVE" as const) : ("PAUSED" as const);
+    const { setBoardStatus } = await import("./gm-board");
+    return { ok: true as const, error: null as string | null, board: setBoardStatus(next) };
+  });
+
+export const setGmWagerStatus = createServerFn({ method: "POST" })
+  .validator((input: { token: string; live: boolean }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    if (!(await verifyAccessToken(data.token))) {
+      return { ok: false as const, error: "Admin session required", wager: null };
+    }
+    const { setWagerLive, wagerAdmin } = await import("./board-wager");
+    return { ok: true as const, error: null as string | null, wager: setWagerLive(Boolean(data.live)), peek: wagerAdmin() };
+  });
+
+export const setChampionshipSim = createServerFn({ method: "POST" })
+  .validator((input: { token: string; status: "LIVE" | "PAUSED" }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    const { systemTokenOnly } = await import("./auth-guards");
+    if (!(await systemTokenOnly(data?.token, verifyAccessToken))) {
+      return { ok: false as const, error: "System admin session required", sim: null };
+    }
+    const next = data.status === "PAUSED" ? ("PAUSED" as const) : ("LIVE" as const);
+    const { setSimStatus } = await import("./world-cup");
+    return {
+      ok: true as const,
+      error: null as string | null,
+      sim: setSimStatus(next, "system"),
+      role: "system" as const,
+    };
+  });
+
+export const fetchChampionshipSim = createServerFn({ method: "POST" })
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    const system = await verifyAccessToken(data.token);
+    const { verifyAppAdminToken } = await import("./app-admin");
+    const copy = verifyAppAdminToken(data.token);
+    if (!system && !copy) {
+      return { ok: false as const, error: "Admin session required", sim: null };
+    }
+    const { simAdmin } = await import("./world-cup");
+    return { ok: true as const, error: null as string | null, sim: simAdmin(), role: system ? ("system" as const) : ("app-admin" as const) };
+  });
+
+export const fetchHiveSwarm = createServerFn({ method: "POST" })
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    const system = await verifyAccessToken(data.token);
+    const { verifyAppAdminToken } = await import("./app-admin");
+    const copy = verifyAppAdminToken(data.token);
+    if (!system && !copy) {
+      return { ok: false as const, error: "Admin session required", hive: null };
+    }
+    const { hiveAdmin } = await import("./hive-swarm");
+    return { ok: true as const, error: null as string | null, hive: hiveAdmin(), role: system ? ("system" as const) : ("app-admin" as const) };
+  });
+
+export const setHiveSwarmStatus = createServerFn({ method: "POST" })
+  .validator((input: { token: string; status: "LIVE" | "PAUSED" }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    const { systemTokenOnly } = await import("./auth-guards");
+    if (!(await systemTokenOnly(data?.token, verifyAccessToken))) {
+      return { ok: false as const, error: "System admin session required", hive: null };
+    }
+    const next = data.status === "PAUSED" ? ("PAUSED" as const) : ("LIVE" as const);
+    const { setHiveStatus } = await import("./hive-swarm");
+    return {
+      ok: true as const,
+      error: null as string | null,
+      hive: setHiveStatus(next, "system"),
+    };
+  });
+
+export const fetchLiveSim = createServerFn({ method: "POST" })
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    const system = await verifyAccessToken(data.token);
+    const { verifyAppAdminToken } = await import("./app-admin");
+    const copy = verifyAppAdminToken(data.token);
+    if (!system && !copy) {
+      return { ok: false as const, error: "Admin session required", sim: null };
+    }
+    const { ensureLiveSimScheduler, liveSimPublic } = await import("./live-sim.server");
+    ensureLiveSimScheduler();
+    return { ok: true as const, error: null as string | null, sim: liveSimPublic(), role: system ? ("system" as const) : ("app-admin" as const) };
+  });
+
+export const setLiveSim = createServerFn({ method: "POST" })
+  .validator((input: { token: string; status: "LIVE" | "PAUSED" }) => input)
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    const { systemTokenOnly } = await import("./auth-guards");
+    if (!(await systemTokenOnly(data?.token, verifyAccessToken))) {
+      return { ok: false as const, error: "System admin session required", sim: null };
+    }
+    const { setLiveSimStatus, ensureLiveSimScheduler } = await import("./live-sim.server");
+    ensureLiveSimScheduler();
+    const next = data.status === "PAUSED" ? ("PAUSED" as const) : ("LIVE" as const);
+    return {
+      ok: true as const,
+      error: null as string | null,
+      sim: setLiveSimStatus(next, "system"),
+      role: "system" as const,
+    };
+  });
+
+export const fetchLockStatus = createServerFn({ method: "GET" }).handler(async () => {
+  const { lockStatusPublic } = await import("./lock-status.server");
+  return lockStatusPublic();
+});
+
+export const setLockStatus = createServerFn({ method: "POST" })
+  .validator(
+    (input: {
+      token: string;
+      op: "master" | "one" | "include" | "includeAll" | "mode";
+      locked?: boolean;
+      id?: LockId;
+      include?: boolean;
+      mode?: "SIM" | "LIVE";
+    }) => input,
+  )
+  .handler(async ({ data }) => {
+    const { verifyAccessToken } = await import("./access.server");
+    const system = await verifyAccessToken(data.token);
+    const { verifyAppAdminToken } = await import("./app-admin");
+    const copy = verifyAppAdminToken(data.token);
+    if (!system && !copy) {
+      return { ok: false as const, error: "Admin session required", lock: null as null };
+    }
+    const by = system ? ("system" as const) : ("app-admin" as const);
+    const { applyMaster, setOneLock, setLockInclude, setIncludeAll, setDeskMode, lockStatusPublic } = await import("./lock-status.server");
+    if (data.op === "mode") {
+      return { ok: true as const, error: null as string | null, lock: setDeskMode(data.mode === "LIVE" ? "LIVE" : "SIM", by), role: by };
+    }
+    if (data.op === "includeAll") {
+      return { ok: true as const, error: null as string | null, lock: setIncludeAll(Boolean(data.include), by), role: by };
+    }
+    if (data.op === "include" && data.id) {
+      return { ok: true as const, error: null as string | null, lock: setLockInclude(data.id, Boolean(data.include), by), role: by };
+    }
+    if (data.op === "one" && data.id) {
+      return { ok: true as const, error: null as string | null, lock: setOneLock(data.id, Boolean(data.locked), by), role: by };
+    }
+    if (data.op === "master") {
+      return { ok: true as const, error: null as string | null, lock: applyMaster(Boolean(data.locked), by), role: by };
+    }
+    return { ok: true as const, error: null as string | null, lock: lockStatusPublic(), role: by };
+  });
+
+/** Admin-only security log rows. Checked on the server; 401 and no data otherwise. */
+export const fetchSecurityLog = createServerFn({ method: "POST" })
+  .middleware([optionalXSession])
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { requireAdminData } = await import("./admin-gate.server");
+    if (!(await requireAdminData(data.token))) return { ok: false as const, protocol: null, vulns: null };
+    const { protocolRows, vulnRows } = await import("./security-log");
+    return { ok: true as const, protocol: protocolRows(), vulns: vulnRows() };
+  });
+
+/** Admin-only research paper. Checked on the server; 401 and no data otherwise. */
+export const fetchAdminPaper = createServerFn({ method: "POST" })
+  .middleware([optionalXSession])
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { requireAdminData } = await import("./admin-gate.server");
+    if (!(await requireAdminData(data.token))) return { ok: false as const, paper: null, guide: null };
+    const { THESIS, THESIS_MARKDOWN, THESIS_META } = await import("./thesis");
+    const { GUIDE, GUIDE_MARKDOWN, GUIDE_META } = await import("./guide");
+    return {
+      ok: true as const,
+      paper: { meta: THESIS_META, sections: THESIS, markdown: THESIS_MARKDOWN },
+      guide: { meta: GUIDE_META, sections: GUIDE, markdown: GUIDE_MARKDOWN },
+    };
+  });
+
+/** After admin sign-in: let this browser load admin page code. Checked on the server; a denied call also drops the cookie. */
+export const grantAdminAssets = createServerFn({ method: "POST" })
+  .middleware([optionalXSession])
+  .validator((input: { token: string }) => input)
+  .handler(async ({ data }) => {
+    const { requireAdminData, setAdminAssetCookie, clearAdminAssetCookie, denyAdminData } = await import("./admin-gate.server");
+    const { grantAdminAssetCookie } = await import("./admin-grant");
+    // The operator token comes from sessionStorage; the sign-in session is forwarded by the middleware.
+    const ok = await grantAdminAssetCookie(data.token, {
+      verify: (t) => requireAdminData(t),
+      setCookie: setAdminAssetCookie,
+      clearCookie: async () => {
+        await clearAdminAssetCookie();
+        await denyAdminData();
+      },
+    });
+    return ok ? { ok: true as const } : { ok: false as const };
+  });

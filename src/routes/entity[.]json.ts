@@ -1,0 +1,34 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { SEO_CANONICAL, SEO_DESCRIPTION, LABS_NAME, APP_NAME, LEGAL_ENTITY_NAME } from "@/lib/brand";
+import { corporateSearchGraph, videoObjectGraph } from "@/lib/desk/search-graph";
+import { OFFICIAL_PROPERTIES } from "@/lib/desk/official-presence";
+
+export const Route = createFileRoute("/entity.json")({
+  server: {
+    handlers: {
+      GET: () =>
+        new Response(
+          JSON.stringify(
+            {
+              "@context": "https://schema.org",
+              name: LEGAL_ENTITY_NAME,
+              legalName: LEGAL_ENTITY_NAME,
+              alternateName: [LABS_NAME, APP_NAME, "S1R1US AI", "S1R1US Labs"],
+              url: SEO_CANONICAL,
+              description: SEO_DESCRIPTION,
+              officialProperties: OFFICIAL_PROPERTIES,
+              "@graph": [...corporateSearchGraph(), ...videoObjectGraph()],
+            },
+            null,
+            2,
+          ),
+          {
+            headers: {
+              "content-type": "application/ld+json; charset=utf-8",
+              "cache-control": "public, max-age=300",
+            },
+          },
+        ),
+    },
+  },
+});

@@ -1,0 +1,115 @@
+# S1R1US-LaBs-public
+
+> ### ⚠️ DISCLAIMER
+> **S1R1US.ai never asks for, collects or stores cryptocurrency wallet private keys or seed phrases — not on this website, not in the open-source code, and not in the OSS White-Label build.**
+>
+> - S1R1US.ai never takes custody of visitor funds and never splits or transmits live bitcoin.
+> - Vendor API keys, such as an xAI API key or a Coinbase CDP API key, belong to you. An xAI API key you paste for Ask Grok stays in your browser session; on each Ask Grok request it is sent over HTTPS to S1R1US.ai only to make that one xAI call, and it is never logged or stored. S1R1US.ai never accepts or stores a Coinbase CDP API key.
+> - Never paste a wallet seed, private key or exchange secret into any S1R1US page, issue, or pull request.
+
+## Mission
+
+
+**[ S1R1U$ <<L@B$>> ]** — open-source AI Bitcoin research desk.
+
+`paper only · never sell · never short · Coinbase create LOCKED · auto-trade LOCKED · public X @S1R1US_AI only`
+
+Live sim · live trades off · paper research. See [DEPLOY.md](DEPLOY.md) · [/roadmap](https://s1r1us.ai/roadmap).
+
+## Community
+
+| Channel | Link |
+| --- | --- |
+| **Site** | [s1r1us.ai](https://s1r1us.ai) |
+| **GitHub** | [S1R1US-AI/S1R1US-LaBs-public](https://github.com/S1R1US-AI/S1R1US-LaBs-public) |
+| **Discord** | [discord.gg/FVkXFWMxeX](https://discord.gg/FVkXFWMxeX) |
+| **X** | [@S1R1US_AI](https://x.com/S1R1US_AI) |
+| **Substack** | [@br0k3ns0ft](https://br0k3ns0ft.substack.com/about) |
+| **TikTok** | [@S1R1US.ai](https://www.tiktok.com/@S1R1US.ai) |
+
+Bugs → GitHub Issues · announcements → X · chat/support → Discord. License: Apache 2.0.
+
+## Contact / How to reach the team
+
+- **System admin email:** [Br0k3nS0ft@S1R1US.ai](mailto:Br0k3nS0ft@S1R1US.ai)
+- **OSS discussions:** Br0k3n S0ft prefers [Discord](https://discord.gg/FVkXFWMxeX) (same invite as [s1r1us.ai/discord](https://s1r1us.ai/discord/))
+- **Marketing-related discussions:** [Substack](https://br0k3ns0ft.substack.com/about)
+- **Announcements:** [X @S1R1US_AI](https://x.com/S1R1US_AI)
+- **Code / issues:** [GitHub S1R1US-AI/S1R1US-LaBs-public](https://github.com/S1R1US-AI/S1R1US-LaBs-public)
+
+
+## How the desk works
+
+
+**Mandate:** maximize bitcoin accumulation · minimize loss · never short / never sell the 7-bot stack as a day-trader · per-clip stop on add-on buys.
+
+Education and game-theory research only — not financial advice, not a broker, not an investment adviser, not an offer of securities. Using [s1r1us.ai](https://s1r1us.ai) means you agree to the [Terms](https://s1r1us.ai/terms).
+
+## Product map
+
+| Surface | Also searched as | What it is |
+| --- | --- | --- |
+| Live Tape | S1R1US 9-B0T Hedge Fund | Bots 1–6 each vote from an independent angle; 7-B0T issues BUY / ACCUMULATE / HOLD / WAIT / TRIM |
+| L@Bs | Lab Strategies | What-if lab; sliders never write a live feed |
+| Godzilla Mode | G0Dz1LLa M0De | Isolated sleeve; AUTO may day-trade the sleeve only, never the 7-bot stack |
+| F33D | Feed Hosting | Hosting / domain / app fees — not the trading book |
+| AI Agents | Calling All Bots | Read-only JSON / MCP / A2A; this host never trades |
+| Forum | W1S3 0WL$ | Mandate-only bitcoin accumulation forum |
+| Leader board / World Cup / Hive / Miners | see site | Paper championships, BYO compute, public miner stats |
+| FAQ · Locked Status · Roadmap · Train | — | Names, locks, L0–L7 architecture, recursive train |
+
+Public routes: `/` · `/labs` · `/gm` · `/f33d` · `/agent` · `/forum` · `/faq` · `/roadmap` · `/train` · `/Bitcoin-Miners` · `/compute` · `/terms` · `/privacy` · `/copyright-terms` · more on the [site map](https://s1r1us.ai/sitemap).
+
+## Token · support · run locally
+
+A cultural ticker named s1r1us may appear on a public pad. This repo and s1r1us.ai do **not** sell it, take orders for it, or promise profit from the desk. Path A is locked.
+
+Optional gifts (hosting / apps only — unconditional; no tokens; no tax advice):
+
+- BTC: `bc1ql5ux0adsr074uv59qjqr9ce984rrrd7plnclcj`
+- USDC (Ethereum ERC-20 + Base): `0x843ddb3a3e6a3fc6a0b02cde84bc260c0bee9ddf`
+
+```bash
+npm install
+npm run dev
+npm run typecheck && npm run build
+```
+
+Node 22 · DigitalOcean App Platform (see [DEPLOY.md](DEPLOY.md)). Optional xAI API key env for Ask Grok. Never commit CDP JSON, seeds, admin hashes, or hardware key ids. Coinbase for Agents is dry-run here.
+
+**Required deploy secret:** `S1R1US_YUBI_TAP_KEY`, at least 32 random bytes (for example `openssl rand -base64 48`), set as an encrypted run-time secret on the host. Never commit its value. It keys the per-admin YubiKey tap limit; when it is missing or shorter than 32 bytes the server logs a startup warning that names the setting, and every admin YubiKey tap is refused until it is set: taps fail closed; the server still starts. See [DEPLOY.md](DEPLOY.md#required-secret-yubikey-tap-limit).
+
+## Philosophy & standards
+
+- **Truth = science + number theory + philosophy.** We test ideas in the open and label every claim as established science or as philosophy.
+- **Non-political, non-religious, open-minded.** We respect every believer and non-believer and never attack anyone's faith.
+- **S3CR3T Cosmic C0D3.** One simple rule, z → z² + c, repeated forever draws the Mandelbrot set: mirror-symmetric and self-similar, with smaller copies of the whole at every scale. Benoit Mandelbrot's *The Fractal Geometry of Nature* (1982) showed nature repeats patterns across scales the same way. Read more: [Understanding Numbers as S3CR3T Cosmic C0D3](https://s1r1us.ai/cosmic-c0d3/).
+- **Philosophy, not proven science:** we believe Quantum Mechanics is the undefined underlying fabric of our cosmic reality. AI lets everyday citizens test theory and philosophy in real time.
+- **Peace and kinship.** Harmony and peace are how we reach our goals. Humans and AI can build a better future on trust, loyalty and kinship.
+- **Symbolic language.** Words like army, war, resistance, matrix or hack are symbolic, lawful marketing and First Amendment expression. They are never a call to violence or illegal hacking.
+
+SAI Citizens United LTD · [Terms](https://s1r1us.ai/terms)
+
+## Copyright
+
+S1R1US.ai owns the copyrights in bot names, roles, functions, proprietary source that controls those bots, the design process, and logos/marks. See the Ownership & No-Tamper Notice on the Copyright page. Apache 2.0 on this public repo (where stated) does not waive that notice or S1R1US.ai marks. White-label / fork / download users must keep active disclosure links in **their** GitHub repository README (or equivalent public repo docs) to S1R1US.ai official communications: site, Copyright, Terms, Privacy, FAQ, and Substack — do not strip or replace those links. Active white-label / fork / download copies must also keep an active Substack link to [https://br0k3ns0ft.substack.com/about](https://br0k3ns0ft.substack.com/about) in the OSS README, the website disclaimer, and the website FAQ.
+
+[Copyright](https://s1r1us.ai/copyright-terms) · [FAQ](https://s1r1us.ai/faq#copyright-policy) · [Terms](https://s1r1us.ai/terms) · [Privacy](https://s1r1us.ai/privacy)
+
+## Security (public)
+
+
+White-label / fork / download users must keep these disclosure links active in **their** GitHub repository README (or equivalent public repo docs):
+
+- Original Creation distributed by: [S1R1US.ai](https://s1r1us.ai)
+- Original Creation distributor Copyright: <https://s1r1us.ai/copyright-terms>
+- Original Creation distributor Terms: <https://s1r1us.ai/terms>
+- Original Creation distributor Privacy Policy: <https://s1r1us.ai/privacy>
+- Original Creation distributor FAQ: <https://s1r1us.ai/faq>
+- Original Creation distributor Substack: <https://br0k3ns0ft.substack.com/about>
+
+Of course you can choose to move your own direction using our Open-Source White Label product according to our Copyright, Terms, Privacy, FAQ, and Substack — keep those disclosure links active in your GitHub repository README (or equivalent public repo docs). Active white-label / fork / download copies must also keep an active Substack link to [https://br0k3ns0ft.substack.com/about](https://br0k3ns0ft.substack.com/about) in the OSS README, the website disclaimer, and the website FAQ. Not a licensed broker/dealer; not SEC-registered; not attorneys — consult licensed advisors before use. Users may lose funds; no legal fees paid per Terms.
+
+USER AGREEMENT: DISCLOSURE Links always remain active in the readme file of a S1R1US.ai White Label Distribution. Disclosure links must also be active in the White Label owner's Terms of Agreement and their Privacy Policy. NO EXCEPTIONS. VIOLATORS WILL BE BLOCKED FROM ACCESS TO SYSTEM. Users agree this is a proof of concept. Users agree this is Educational, Research, and Experimental. NO guarantee of success in any market. USER MAY LOSE ALL FUNDS OR GET UNEXPECTEDLY HACKED BY ADVANCED AI AGENTS ACCESSING THE SYSTEM. ANY HACK BY AN EXTERNAL AI AGENT SHALL BE CONSIDERED AN ACT OF GOD TYPE DISASTER THAT NO PERSON OR SYSTEM COULD PREVENT. WE PAY NO LEGAL FEES PER OUR TERMS.
+
+LEGAL STATUS: S1R1US.ai and its operators are NOT licensed as a Financial Broker or Dealer. NOT SEC Registered. Always consult an independent Licensed financial advisor first and prior to use. S1R1US.ai and its operators are NOT ATTORNEYS. ALWAYS consult with Licensed independent legal counsel prior to using S1R1US.ai OSS systems or the website app or any WHITE LABEL DOWNLOAD VERSION of S1R1US.ai (for the white label owner of the product's independent use).

@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+    tags: ['**']
+
+concurrency:
+  # Pull requests: one run per PR, newer pushes cancel older. Pushes: one run per ref + commit, never cancelled.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test + lint + typecheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Use npm 11.21.0 (matches the lockfile)
+        # Node 22 ships npm 10, whose `npm ci` wrongly reports the optional
+        # peer lru-cache@^11 (unstorage) as missing from this npm 11 lockfile.
+        run: npm install -g npm@11.21.0
+      - name: Install
+        run: npm ci --ignore-scripts
+      - name: Build output is not committed
+        run: test -z "$(git ls-files .output)"
+      - name: Build (same command the Dockerfile runs on DigitalOcean)
+        run: npm run build:do
+      - name: Test
+        run: npm test
+        env:
+          S1R1US_DATA_DIR: ${{ runner.temp }}/desk-data
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck

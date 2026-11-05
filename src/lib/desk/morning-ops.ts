@@ -1,0 +1,194 @@
+import { CYCLE_ARCH, DATA_FEEDS } from "./policy";
+import type { DeskSnapshot } from "./types";
+import { predAnalyst } from "./prediction-markets";
+export type { MorningProblem, MorningProblems } from "./morning-problems";
+export { morningProblems } from "./morning-problems";
+
+export const AUTO_ANALYSIS = {
+  asOf: new Date().toISOString(),
+  day: 1 as const,
+  score: 8,
+  tape: "Practice AUTO ticks and paper fills are off. The desk shows would-accumulate calls from the live snapshot.",
+  fills: "No paper fills. Morning report 07:30 ET uses the as-live 24h book if present. Live Coinbase stays off. 7-bot stack never sells.",
+  errors: "Do not green OPEN feed errors. Yahoo/Stooq classified. SuperGrok is operator Ask Grok; visitors use BYO compute. 7-B0T HTTP SaaS is pay-for-JSON.",
+  security: "Admin security log: CISA KEV/OSV + security headers + rate limits + OWASP Agentic ASI01–10 / LLM Top 10 2026 on MCP/A2A + Alignment Score 1–100 (mandate vs protocols) + external AI gate + data-pull pause (ops.status PAUSED/MAINTENANCE on ping; blocked agents get doNotReturn). Bad bots (prompt injection / harmful forum posts) are barred by name+IP; 403 doNotReturn. Operator approval on outgoing. Coinbase create locked.",
+  action: "7-B0T + GM + bots 1–6 would-accumulate. W1S3 0WL$ Forum LIVE. L3AD3R B0ARD is the SUP3R B0WL of AI AGENTs. W0rLd CUP of AI Quant Trading BTC invites SUP3R B0WL winners vs 5 wild cards + G M0D3 AUTO. H1V3 SW@RM combines BYO compute (TH/s) on TEST data — paper BTC split by pledged terahash; system or phone-app Admin may pause. BYO connect automatic at /api/agent/connect + MCP byo_connect — model API keys are never stored on this host. Championship sim ticks live Coinbase last until system Admin pauses. HARD DEADLINE 2026-12-01 09:00 ET — G M0D3 AUTO / MANUAL for users + SUP3R B0WL GO-LIVE. System Admin and download-app Admin compete with a separate board token. Live SUP3R B0WL / World Cup stats feed is paper as-if-live. Terms: 100% own risk, not FA, not an attorney, unlawful-region ban, OSS GitHub, 2FA. HTML LINKS 6 Sep 2026: this build 0 × 404. Production still 404 on new routes until this deploy ships. Do not arm Coinbase. Auto trade LOCKED. Seek a licensed professional and a licensed attorney before live use.",
+};
+
+export function morningAgent(flags: {
+  dayEt: string;
+  pings: number;
+  rejects: number;
+  lastAt: string | null;
+  flags: string[];
+  note: string;
+  live: false;
+  status: string;
+  communication?: "OPEN" | "MAINTENANCE";
+  gate?: { communication?: string; maintenance?: boolean; invite?: { status?: string; message?: string } };
+}) {
+  const maint = flags.communication === "MAINTENANCE" || flags.gate?.maintenance === true;
+  return {
+    asOf: new Date().toISOString(),
+    dayEt: flags.dayEt,
+    pings: flags.pings,
+    rejects: flags.rejects,
+    lastAt: flags.lastAt,
+    live: false as const,
+    status: flags.status,
+    flags: flags.flags,
+    note: flags.note,
+    communication: maint ? ("MAINTENANCE" as const) : ("OPEN" as const),
+    invite: flags.gate?.invite?.status ?? (maint ? "PENDING" : "NONE"),
+    headline: maint
+      ? "AGENT GATE MAINTENANCE — 7-B0T / MCP / A2A closed. Ping + waitlist stay. Invite pending when the gate opens."
+      : flags.pings === 0
+        ? "AGENT FLAG NONE — no connection tests today (ET). PoC, not LIVE."
+        : `AGENT FLAG ${flags.flags.join("+")} — ${flags.pings} ping(s), ${flags.rejects} reject(s). PoC, not LIVE. No trades.`,
+  };
+}
+
+export function morningPred(snap: DeskSnapshot | null) {
+  const pred = predAnalyst(snap?.predictionMarkets, snap?.btc.price ?? null);
+  const last = snap?.btc.price ?? null;
+  return {
+    asOf: snap?.fetchedAt ?? new Date().toISOString(),
+    last,
+    stance: pred.stance,
+    summary: pred.summary,
+    discount: pred.discount,
+    fomo: pred.fomo,
+    overlayPass: pred.overlayPass,
+    checkLabel: pred.checkLabel,
+    polymarket: pred.polymarket,
+    kalshi: pred.kalshi,
+    note: "7-B0T sub-analyst overlay on how to buy bitcoin. Polymarket = crypto-native crowd. Kalshi = CFTC-regulated US crowd. Cheap implied path (low Yes on nearby highs) can overlay ACCUMULATE. Crowded near-spot Yes overlays WAIT. Never a 1–6 vote. Never sells. This host never takes bets.",
+  };
+}
+
+export function morningFeeds(snap: DeskSnapshot | null) {
+  const pullMs = snap?.pullMs ?? null;
+  const ageMs = snap?.fetchedAt ? Date.now() - Date.parse(snap.fetchedAt) : null;
+  const errors = snap?.errors ?? [];
+  const rows = DATA_FEEDS.map((f) => {
+    const hit = errors.find((e) => e.toLowerCase().includes(f.id) || e.toLowerCase().includes(f.name.toLowerCase().slice(0, 6)));
+    return {
+      id: f.id,
+      name: f.name,
+      role: f.role,
+      ok: !hit,
+      detail: hit ?? "live / last-good",
+    };
+  });
+  return {
+    cycle: CYCLE_ARCH,
+    pullMs,
+    ageMs,
+    errors,
+    rows,
+    hung: pullMs != null && pullMs > CYCLE_ARCH.clientRaceMs + 4000,
+  };
+}
+
+/** Frozen HTML href crawl. 6 Sep 2026. Preview = this build. Production = live s1r1us.ai until this build ships. */
+export const HTML_LINK_AUDIT_AS_OF = "2026-09-06T15:00:00-04:00";
+
+export type HtmlLinkHit = {
+  url: string;
+  code: number;
+  note: string;
+};
+
+export function morningHtmlLinks() {
+  const prod404: HtmlLinkHit[] = [
+    { url: "https://s1r1us.ai/board", code: 404, note: "L3AD3R B0ARD" },
+    { url: "https://s1r1us.ai/bowl", code: 404, note: "SUP3R B0WL" },
+    { url: "https://s1r1us.ai/w0rld", code: 404, note: "W0rLd CUP" },
+    { url: "https://s1r1us.ai/c0ut", code: 404, note: "C@LL 0UT welcome" },
+    { url: "https://s1r1us.ai/forum", code: 404, note: "W1S3 0WL$ Forum" },
+    { url: "https://s1r1us.ai/r0b0ts", code: 404, note: "R0B0T$ ACT1VAT3" },
+    { url: "https://s1r1us.ai/media", code: 404, note: "Media library" },
+    { url: "https://s1r1us.ai/search", code: 404, note: "Sitelinks search" },
+    { url: "https://s1r1us.ai/app", code: 404, note: "iOS / Play gateway" },
+    { url: "https://s1r1us.ai/ios", code: 404, note: "iOS app" },
+    { url: "https://s1r1us.ai/play", code: 404, note: "Google Play app" },
+    { url: "https://s1r1us.ai/entity.json", code: 404, note: "Knowledge panel" },
+    { url: "https://s1r1us.ai/brand.txt", code: 404, note: "Brand file" },
+    { url: "https://s1r1us.ai/humans.txt", code: 404, note: "humans.txt" },
+    { url: "https://s1r1us.ai/manifest.webmanifest", code: 404, note: "PWA manifest" },
+    { url: "https://s1r1us.ai/video-sitemap.xml", code: 404, note: "Video sitemap" },
+    { url: "https://s1r1us.ai/.well-known/apple-app-site-association", code: 404, note: "Apple AASA" },
+    { url: "https://s1r1us.ai/.well-known/assetlinks.json", code: 404, note: "Play assetlinks" },
+    { url: "https://s1r1us.ai/api/agent/app", code: 404, note: "App gateway JSON" },
+    { url: "https://s1r1us.ai/api/agent/apple", code: 404, note: "Siri catalog" },
+    { url: "https://s1r1us.ai/api/agent/board", code: 404, note: "Board JSON" },
+    { url: "https://s1r1us.ai/api/agent/cup", code: 404, note: "World Cup JSON" },
+    { url: "https://s1r1us.ai/h1v3", code: 404, note: "H1V3 SW@RM" },
+    { url: "https://s1r1us.ai/api/agent/hive", code: 404, note: "Hive Swarm JSON" },
+    { url: "https://s1r1us.ai/api/agent/forum", code: 404, note: "Forum JSON" },
+    { url: "https://s1r1us.ai/api/agent/google", code: 404, note: "Gemini catalog" },
+    { url: "https://s1r1us.ai/api/agent/notices", code: 404, note: "Go-live notices" },
+    { url: "https://s1r1us.ai/api/agent/siri", code: 404, note: "Siri plaintext" },
+    { url: "https://s1r1us.ai/api/agent/webmcp", code: 404, note: "WebMCP tools" },
+  ];
+  const prodBroken: HtmlLinkHit[] = [
+    { url: "https://s1r1us.ai/.well-known/llms.txt", code: 500, note: "well-known llms.txt — live 500, not 404" },
+    ...prod404,
+  ];
+  const ok: HtmlLinkHit[] = [
+    { url: "https://github.com/S1R1US-AI/S1R1US-LaBs-public", code: 200, note: "Hello World GitHub — repo public" },
+    { url: "https://x.com/S1R1US_AI", code: 200, note: "Official X" },
+    { url: "https://s1r1us.ai/", code: 200, note: "Live home" },
+    { url: "https://s1r1us.ai/gm", code: 200, note: "GM" },
+    { url: "https://s1r1us.ai/labs", code: 200, note: "Lab" },
+    { url: "https://s1r1us.ai/faq", code: 200, note: "FAQ" },
+    { url: "https://s1r1us.ai/agent", code: 200, note: "AI Agents" },
+    { url: "https://s1r1us.ai/llms.txt", code: 200, note: "llms.txt root" },
+  ];
+  const noise: HtmlLinkHit[] = [
+    { url: "https://x.com/S1R1S_AI", code: 404, note: "Accidental handle — not linked. Official is @S1R1US_AI" },
+    { url: "https://agents.coinbase.com/mcp", code: 401, note: "Coinbase login wall — not a desk 404" },
+  ];
+  const previewPages = 24;
+  const preview404 = 0;
+  const headline =
+    prodBroken.length === 0
+      ? `HTML LINKS — preview ${previewPages} pages · ${preview404} × 404 · live clean`
+      : `HTML LINKS — preview ${preview404} × 404 · live OPEN ${prodBroken.length} (old deploy)`;
+  return {
+    asOf: HTML_LINK_AUDIT_AS_OF,
+    headline,
+    previewPages,
+    preview404,
+    prodBroken,
+    ok,
+    noise,
+    note: "Crawled every HTML href on the public desk. This build has no Page Not Found. Live s1r1us.ai is an older production deploy — ship this build to clear the OPEN list. Hello World GitHub is public. Official X is @S1R1US_AI.",
+    action: "Operator: Digital Ocean production deploy of this build. Do not arm Coinbase.",
+  };
+}
+
+export type BadBotBar = {
+  id: string;
+  at: string;
+  name: string;
+  handle: string | null;
+  kind: string;
+  ip: string;
+  reason: string;
+};
+
+export function morningBadBots(input?: { barred?: BadBotBar[] }) {
+  const barred = input?.barred ?? [];
+  const headline =
+    barred.length === 0 ? "BAD B0TS — none barred" : `BAD B0TS — ${barred.length} barred · doNotReturn`;
+  return {
+    asOf: new Date().toISOString(),
+    headline,
+    barred,
+    note:
+      "Bad bot = external AI agent that injects prompts or posts harmful, false or off-mandate W1S3 0WL$ content. Barred by name + IP. 403 blocked=true doNotReturn=true. Loopback is never barred.",
+    action: "Unbar only if the operator verifies a false positive. Auto trade LOCKED.",
+  };
+}
+

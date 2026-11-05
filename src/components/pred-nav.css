@@ -1,0 +1,33 @@
+/* Gold shimmer — same as .gold-css */
+.desk-tabs a.pred-nav,
+.pred-nav,
+.pred-title {
+  font-weight: 700;
+  display: inline-block;
+  background-image: linear-gradient(
+    90deg,
+    #6b3f00,
+    #b8860b,
+    #ffd24a,
+    #fff6c2,
+    #e8c547,
+    #ffb347,
+    #6b3f00
+  );
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  animation: godzilla-shift 3.6s linear infinite;
+}
+.desk-tabs a.pred-nav.is-on {
+  box-shadow: inset 0 -2px 0 #ffd24a;
+}
+
+/* One official chip only (data-x-chip). Hide leftover @S1R1US_AI text links. */
+a.x-handle-nav,
+.desk-tabs a.x-handle-nav,
+header.desk-nav-fiber a[href="https://x.com/S1R1US_AI"]:not([data-x-chip]) {
+  display: none !important;
+}

@@ -1,0 +1,213 @@
+import { useEffect, useMemo, useState, type ClipboardEvent, type FormEvent } from "react";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { Lock } from "lucide-react";
+import { authEnabled, signIn, xSignInProviderId } from "@/lib/auth/client";
+import { UserButton } from "@/lib/auth/gates";
+import { useCurrentUser, useCurrentUserState } from "@/lib/auth/use-current-user";
+import { Button } from "@/components/ui/button";
+import { XRenewWhenAdmin } from "@/components/renew-password";
+import { ResetPwordExpand } from "@/components/reset-pword";
+import { YubiSuggest } from "@/components/yubi-suggest";
+import { YubiForm } from "@/components/operator-lock";
+import { secondFactorStatus } from "@/lib/desk/access";
+import { useOperator } from "@/lib/desk/operator";
+import { looksLikeSecret } from "@/lib/desk/secret-check";
+import { APP_NAME } from "@/lib/brand";
+import { LoginCluster, Shell } from "@/components/shell";
+import { useWindowSearch } from "@/lib/react/client";
+
+export const Route = createFileRoute("/login")({
+  component: Login,
+  head: () => ({
+    meta: [
+      { title: `Sign in · ${APP_NAME}` },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+});
+
+function Login() {
+  const { user, isPending } = useCurrentUserState();
+  const me = useCurrentUser();
+  const unlocked = useOperator((s) => s.unlocked);
+  const idleLocked = useOperator((s) => s.idleLocked);
+  const role = useOperator((s) => s.role);
+  const yubiTicket = useOperator((s) => s.yubiTicket);
+  const unlock = useOperator((s) => s.unlock);
+  const [name, setName] = useState("");
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [xAdmin, setXAdmin] = useState(false);
+  const [xWaitErr, setXWaitErr] = useState<string | null>(null);
+  const search = useWindowSearch();
+  const searchErr = useMemo(() => {
+    if (!search) return null;
+    const q = new URLSearchParams(search).get("error");
+    return q
+      ? "X sign-in did not finish. Try Continue with X again, or sign in below."
+      : null;
+  }, [search]);
+  const xErr = xWaitErr ?? searchErr;
+
+  useEffect(() => {
+    if (!me) return;
+    let gone = false;
+    void (async () => {
+      try {
+        const st = await secondFactorStatus();
+        if (gone) return;
+        setXAdmin(Boolean(st.allowed));
+      } catch {
+        if (!gone) setXAdmin(false);
+      }
+    })();
+    return () => {
+      gone = true;
+    };
+  }, [me]);
+  const xAdminOk = Boolean(me) && xAdmin;
+
+  if (isPending) {
+    return (
+      <Shell>
+      <main className="mx-auto max-w-lg px-4 py-10 sm:px-6">
+        <p className="text-xs font-medium tracking-[0.08em] text-muted uppercase">login</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-medium">{APP_NAME}</h1>
+        <div className="mt-6 h-11 animate-pulse rounded-md bg-fg/8" />
+      </main>
+      </Shell>
+    );
+  }
+  if (unlocked) return <Navigate to={role === "user" ? "/" : "/admin"} />;
+  if (yubiTicket) {
+    return (
+      <Shell right={<LoginCluster />}>
+        <YubiSuggest />
+        <YubiForm />
+      </Shell>
+    );
+  }
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (looksLikeSecret(name) || looksLikeSecret(pass)) {
+      setErr("Secret rejected. Never paste a Coinbase API key, wallet seed or private key here.");
+      setPass("");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    const fail = await Promise.race([
+      unlock(name, pass),
+      new Promise<string>((resolve) =>
+        setTimeout(() => resolve("Login timed out. Refresh and try again."), 20_000),
+      ),
+    ]);
+    setBusy(false);
+    if (fail && fail !== "yubi") {
+      setErr(fail);
+      setPass("");
+    }
+  }
+
+  function guardPaste(e: ClipboardEvent<HTMLInputElement>) {
+    const t = e.clipboardData.getData("text");
+    if (looksLikeSecret(t)) {
+      e.preventDefault();
+      setErr("Secret rejected. Never paste a Coinbase API key, wallet seed or private key here.");
+    }
+  }
+
+  return (
+    <Shell right={<LoginCluster />}>
+      <main className="mx-auto max-w-lg px-4 py-10 sm:px-6">
+      <p className="text-xs font-medium tracking-[0.08em] text-muted uppercase">
+        {idleLocked ? "Idle lock" : "login"}
+      </p>
+      <h1 className="mt-2 text-2xl font-bold tracking-tight text-medium">{APP_NAME}</h1>
+      <YubiSuggest />
+      {idleLocked ? (
+        <p className="mt-3 text-sm leading-relaxed text-muted">
+          Screensaver locked the desk. Sign in again.
+        </p>
+      ) : null}
+      {authEnabled && !user ? (
+        <div className="mt-6 space-y-2">
+          <Button
+            variant="primary"
+            className="w-full"
+            type="button"
+            onClick={() => {
+              setXWaitErr(null);
+              void Promise.race([
+                signIn(xSignInProviderId(), { callbackURL: "/login", errorCallbackURL: "/login" }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("x-timeout")), 90_000)),
+              ]).catch(() => {
+                setXWaitErr("X is still waiting. Allow popups, finish X, or sign in below.");
+              });
+            }}
+          >
+            Continue with X
+          </Button>
+          <p className="text-xs leading-relaxed text-muted">
+            Operator sign-in only. Other accounts stay desk users.
+            Other X accounts stay users. iOS / Google copy Admin is on the downloaded app.
+          </p>
+          {xErr ? <p className="text-sm text-down">{xErr}</p> : null}
+        </div>
+      ) : user ? (
+        <div className="mt-6 space-y-3">
+          <UserButton />
+          {xAdminOk ? (
+            <p className="text-sm text-high">
+              Operator verified. Finish signing in below.
+            </p>
+          ) : (
+            <p className="text-sm text-muted">
+              This X session is not the operator account. Sign out, then Continue with X again as the operator.
+              iOS / Google copy Admin is a separate lock on the downloaded app.
+            </p>
+          )}
+          <XRenewWhenAdmin />
+        </div>
+      ) : null}
+      <form onSubmit={(e) => void onSubmit(e)} className="mt-6 space-y-3">
+        <label className="block text-sm" htmlFor="login-user">
+          Name
+        </label>
+        <input
+          id="login-user"
+          type="text"
+          autoComplete="username"
+          placeholder="**************"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onPaste={guardPaste}
+          className="h-11 w-full rounded-md border border-rule bg-surface px-3 text-sm text-fg"
+          required
+        />
+        <label className="block text-sm" htmlFor="login-pass">
+          Password
+        </label>
+        <input
+          id="login-pass"
+          type="password"
+          autoComplete="current-password"
+          value={pass}
+          onChange={(e) => setPass(e.target.value)}
+          onPaste={guardPaste}
+          className="h-11 w-full rounded-md border border-rule bg-surface px-3 text-sm text-fg"
+          required
+        />
+        {err ? <p className="text-sm text-down">{err}</p> : null}
+        <Button variant="primary" type="submit" disabled={busy} className="w-full">
+          <Lock className="size-4" />
+          {xAdminOk ? "Unlock admin" : "Unlock"}
+        </Button>
+      </form>
+      <ResetPwordExpand plane="system" />
+      </main>
+    </Shell>
+  );
+}

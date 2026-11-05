@@ -1,0 +1,7 @@
+# S1R1US.ai
+
+> Education and proof-of-concept site about AI agents and Bitcoin accumulation, by SAI Citizens United LTD. Not financial advice.
+
+## FAQ
+
+- [S1R1US.ai FAQ](https://s1r1us.ai/faq/): what the site is, what is live today, and what is planned.

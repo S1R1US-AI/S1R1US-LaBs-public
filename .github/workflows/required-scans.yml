@@ -1,0 +1,297 @@
+name: Security scans
+
+# Free scans that run on every pull request and on every push to any branch or tag,
+# in place of CodeQL and the built-in secret scanning while CodeQL is unavailable.
+# No paid plan, login or token is used. Every job has no `if:` and no path filter,
+# so a check can never be skipped and reported as passing.
+# "Security scans (all passed)" fails unless every scan job finished with success.
+# Nothing here retries on its own. A failed run needs a person to look at it.
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+    tags: ['**']
+  # Weekly full-history gitleaks + whole-tree Semgrep on main (no before-commit on a schedule, so the
+  # base pick returns full history). Replaces the old main-only leak-scan.yml (02 B6).
+  schedule:
+    - cron: '41 8 * * 1'
+
+permissions: {}
+
+concurrency:
+  # Pull requests: one run per PR, newer pushes cancel older. Pushes: one run per ref + commit, never cancelled.
+  group: required-scans-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read  # check out the code
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks 8.30.1 (checksum pinned)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/scan-tools"
+          cd "$HOME/scan-tools"
+          wget -q -O gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+      - name: Scan every new commit (pull request range, or the pushed range on main; findings are redacted)
+        env:
+          event: ${{ github.event_name }}
+          push_deleted: ${{ github.event.deleted }}
+          pr_base: ${{ github.event.pull_request.base.sha }}
+          pr_head: ${{ github.event.pull_request.head.sha }}
+          push_before: ${{ github.event.before }}
+          push_after: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "$push_deleted" = "true" ]; then echo "ref deleted: no new commits to scan"; exit 0; fi
+          # Push base: the previous tip when it is present and an ancestor of the new tip; otherwise (new branch,
+          # force-push, or a before-commit missing from the clone) the merge-base with the default branch.
+          # If the new tip is already on the default branch (a new branch made at an old main commit), there are
+          # no new commits: those commits were scanned when they reached main. Prints "on-default" for that case.
+          # If no base can be found at all (unrelated history), the whole history of the new tip is scanned.
+          pick_push_base() {
+            local before="$1" after="$2" mb
+            case "$before" in
+              ""|0000000000000000000000000000000000000000|*[!0-9a-f]*) before="" ;;
+            esac
+            if [ -n "$before" ] && git cat-file -e "$before^{commit}" 2>/dev/null && git merge-base --is-ancestor "$before" "$after"; then
+              echo "$before"; return
+            fi
+            # A push to the default branch itself with no usable before-commit (first push) scans everything.
+            if [ "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH" ]; then echo ""; return; fi
+            mb="$(git merge-base "refs/remotes/origin/$DEFAULT_BRANCH" "$after" 2>/dev/null || true)"
+            if [ -n "$mb" ] && [ "$mb" = "$after" ]; then echo "on-default"; return; fi
+            if [ -n "$mb" ]; then echo "$mb"; return; fi
+            echo ""
+          }
+          if [ "$event" = "pull_request" ]; then
+            base="$pr_base"; head="$pr_head"
+          else
+            head="$push_after"; base="$(pick_push_base "$push_before" "$head")"
+            if [ "$base" = "on-default" ]; then echo "0 new commits: $head is already on the default branch (scanned there)"; exit 0; fi
+          fi
+          case "$head" in
+            ""|0000000000000000000000000000000000000000|*[!0-9a-f]*)
+              echo "::error::no usable head commit ($event); failing closed"; exit 1 ;;
+          esac
+          git cat-file -e "$head^{commit}"
+          if [ -n "$base" ]; then
+            git cat-file -e "$base^{commit}"
+            range="$base..$head"
+          elif [ "$event" = "push" ] || [ "$event" = "schedule" ]; then
+            echo "no base found; scanning the full history of $head"
+            range="$head"
+          else
+            echo "::error::no usable commit range ($event); failing closed"; exit 1
+          fi
+          n="$(git rev-list --count "$range")"
+          echo "scanning $n commit(s): $range"
+          [ "$n" -gt 0 ] || { echo "::error::empty commit range; failing closed"; exit 1; }
+          # Trusted config and an empty ignore dir live outside the checkout, so a PR cannot allowlist its own secret.
+          cfg="$RUNNER_TEMP/gitleaks"
+          mkdir -p "$cfg/ignore"
+          # Trusted rules: the gitleaks v8.30.1 defaults, checksum pinned. Removed: the global path allowlist
+          # (lockfiles, node_modules, images, gitleaks.toml) and every per-rule allowlist that skips a file path
+          # or a whole line, so no file is skipped by its path and no secret is skipped by the text around it.
+          # Kept: allowlists that test only the matched text (placeholder values such as EXAMPLE keys).
+          wget -q -O "$cfg/default.toml" https://raw.githubusercontent.com/gitleaks/gitleaks/v8.30.1/config/gitleaks.toml
+          echo "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf  $cfg/default.toml" | sha256sum -c -
+          awk '/^\[\[rules\]\]/{r=1} !r && /^paths = \[/{s=1; next} s{ if ($0 ~ /^\]$/) {s=0}; next } {print}' "$cfg/default.toml" \
+            | awk '/^\[\[rules\.allowlists\]\]$/{if(b)f(); b=1; n=0; d=0; k[++n]=$0; next} b && ($0=="" || /^\[/){f()} b{k[++n]=$0; if ($0 ~ /^regexTarget = "line"$/ || $0 ~ /^paths = \[/) d=1; next} {print} function f(i){if(!d) for(i=1;i<=n;i++) print k[i]; b=0; d=0; n=0} END{if(b) f()}' > "$cfg/gitleaks.toml"
+          echo "e89e91a5a6bda8790eea8f6d63b17439b12b091911e21320f7d2a5b3ae689c7d  $cfg/gitleaks.toml" | sha256sum -c -
+          # gitleaks also reads .gitleaksignore from the scanned dir, so drop the working copy (history is read from git).
+          rm -rf -- ./.gitleaksignore
+          # Read git attributes from an empty tree so a .gitattributes in the scanned code cannot mark a
+          # file as binary and hide its patch, and pass --text so every file's patch is scanned.
+          GIT_ATTR_SOURCE="$(git hash-object -t tree -w /dev/null)"
+          export GIT_ATTR_SOURCE
+          # -m also scans each merge commit against every one of its parents.
+          "$HOME/scan-tools/gitleaks" git --redact --no-banner --exit-code 1 --ignore-gitleaks-allow --config "$cfg/gitleaks.toml" --gitleaks-ignore-path "$cfg/ignore" --log-opts="--text -m $range" .
+
+  semgrep:
+    name: Semgrep (JS/TS, Python, Actions)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read  # check out the code
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch the open Semgrep rules at a pinned commit (no login, no token)
+        run: |
+          set -euo pipefail
+          rules_commit=16b9e6d45f10649f6a531ec4838ed9924372c3bc
+          mkdir -p "$HOME/scan-tools"
+          git init -q "$HOME/scan-tools/rules"
+          git -C "$HOME/scan-tools/rules" fetch -q --depth 1 https://github.com/semgrep/semgrep-rules "$rules_commit"
+          git -C "$HOME/scan-tools/rules" checkout -q "$rules_commit"
+          test "$(git -C "$HOME/scan-tools/rules" rev-parse HEAD)" = "$rules_commit"
+      - name: Semgrep 1.182.1 (image pinned by digest, offline, metrics off; ranged findings fail, whole-tree report-only)
+        env:
+          event: ${{ github.event_name }}
+          push_deleted: ${{ github.event.deleted }}
+          pr_base: ${{ github.event.pull_request.base.sha }}
+          push_before: ${{ github.event.before }}
+          push_after: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "$push_deleted" = "true" ]; then echo "ref deleted: no new commits to scan"; exit 0; fi
+          # Push base: the previous tip when it is present and an ancestor of the new tip; otherwise (new branch,
+          # force-push, or a before-commit missing from the clone) the merge-base with the default branch.
+          # If the new tip is already on the default branch (a new branch made at an old main commit), there are
+          # no new commits: those commits were scanned when they reached main. Prints "on-default" for that case.
+          # If no base can be found at all (unrelated history), the whole history of the new tip is scanned.
+          pick_push_base() {
+            local before="$1" after="$2" mb
+            case "$before" in
+              ""|0000000000000000000000000000000000000000|*[!0-9a-f]*) before="" ;;
+            esac
+            if [ -n "$before" ] && git cat-file -e "$before^{commit}" 2>/dev/null && git merge-base --is-ancestor "$before" "$after"; then
+              echo "$before"; return
+            fi
+            # A push to the default branch itself with no usable before-commit (first push) scans everything.
+            if [ "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH" ]; then echo ""; return; fi
+            mb="$(git merge-base "refs/remotes/origin/$DEFAULT_BRANCH" "$after" 2>/dev/null || true)"
+            if [ -n "$mb" ] && [ "$mb" = "$after" ]; then echo "on-default"; return; fi
+            if [ -n "$mb" ]; then echo "$mb"; return; fi
+            echo ""
+          }
+          # Mode: ranged (blocking), full-report (schedule / no-base push; report-only), fail (PR with no/ambiguous base).
+          if [ "$event" = "pull_request" ]; then base="$pr_base"; else base="$(pick_push_base "$push_before" "$push_after")"; fi
+          if [ "$base" = "on-default" ]; then echo "0 new commits: already on the default branch (scanned there)"; exit 0; fi
+          baseline=()
+          report_only=0
+          if [ -n "$base" ]; then
+            case "$base" in
+              0000000000000000000000000000000000000000|*[!0-9a-f]*) echo "::error::no usable baseline commit; failing closed"; exit 1 ;;
+            esac
+            git cat-file -e "$base^{commit}"
+            baseline=(--baseline-commit "$base")
+          elif [ "$event" = "push" ] || [ "$event" = "schedule" ]; then
+            # B7: whole-tree Semgrep on first push to default / weekly schedule is report-only so main can go green.
+            # Gitleaks stays blocking. PR and ranged-push Semgrep stay blocking. Report-only is temporary (burn-down).
+            echo "no baseline found; scanning the whole tree (report-only: pre-existing findings do not fail the job)"
+            report_only=1
+          else
+            # PR with empty/missing base: fail closed (ambiguous base never passes).
+            echo "::error::no usable baseline commit; failing closed"; exit 1
+          fi
+          # Only findings that are new since the baseline commit count as blocking here.
+          # --strict also fails the scan on warnings such as files that could not be parsed.
+          # --max-target-bytes 0 scans files of any size instead of skipping large ones.
+          # --disable-nosem and --x-ignore-semgrepignore-files stop inline nosemgrep comments and
+          # .semgrepignore files in the scanned tree from hiding a finding (the image is pinned, so the flags stay).
+          out="$RUNNER_TEMP/semgrep"
+          mkdir -p "$out"
+          status=0
+          docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/src" -v "$HOME/scan-tools/rules:/rules:ro" -v "$out:/out" -w /src \
+            semgrep/semgrep@sha256:451b3d875c00dac7ed5db5293e584a07de11449a409c10b3c2d2652f429630b6 \
+            semgrep scan --metrics=off --disable-version-check --severity ERROR --severity WARNING --error --strict \
+              --disable-nosem --x-ignore-semgrepignore-files --max-target-bytes 0 \
+              --quiet --json-output /out/results.json --sarif-output /out/results.sarif \
+              "${baseline[@]}" \
+              --config /rules/javascript --config /rules/typescript \
+              --config /rules/python --config /rules/yaml/github-actions . || status=$?
+          # Print only the rule id, severity, path and line of each finding or scan error.
+          # Matched source text is never printed to the log.
+          if ! jq -e '.results and .errors' "$out/results.json" >/dev/null 2>&1; then
+            echo "::error::Semgrep did not write a readable result (exit $status); failing closed"; exit 1
+          fi
+          jq -r '.results[] | "finding: rule=\(.check_id) severity=\(.extra.severity // "unknown") path=\(.path | tojson) line=\(.start.line)"' "$out/results.json"
+          jq -r '.errors[] | "scan error: level=\(.level // "unknown") type=\(.type | if type == "array" then .[0] else . end | tojson) path=\(.path // "" | tojson) line=\(.spans[0]?.start.line // "")"' "$out/results.json"
+          findings="$(jq '.results | length' "$out/results.json")"
+          errors="$(jq '.errors | length' "$out/results.json")"
+          echo "semgrep exit $status, $findings finding(s), $errors scan error(s), report_only=$report_only"
+          if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
+            if [ "$report_only" = "1" ]; then
+              echo "::warning::Semgrep whole-tree report-only: exit $status, $findings finding(s), $errors scan error(s); not failing (see semgrep-results artifact)"
+              exit 0
+            fi
+            echo "::error::Semgrep found issues or could not finish cleanly (exit $status)"; exit 1
+          fi
+      - name: Upload Semgrep results (JSON + SARIF)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: semgrep-results-${{ github.event_name }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/semgrep/results.json
+            ${{ runner.temp }}/semgrep/results.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+  osv:
+    # REPORT-ONLY until the known findings in this repo are fixed (02 B1). Not in all-passed, not required.
+    # Later, separate go: make a finding fail the job and add osv to all-passed needs (expected count 3).
+    name: Dependency scan (osv-scanner, report-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read  # check out the code
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Install osv-scanner 2.7.0 (checksum pinned, official release binary)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/scan-tools"
+          cd "$HOME/scan-tools"
+          wget -q -O osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64
+          echo "160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b  osv-scanner" | sha256sum -c -
+          chmod +x osv-scanner
+      - name: Scan every lockfile against OSV.dev (no token; package names and versions only are sent)
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/osv.json"
+          status=0
+          # --recursive finds every lockfile in the tree; no in-tree osv-scanner.toml is trusted.
+          "$HOME/scan-tools/osv-scanner" scan source --recursive --no-ignore --format json --output-file "$out" --config /dev/null . || status=$?
+          if ! jq -e '.results' "$out" >/dev/null 2>&1; then
+            echo "::error::osv-scanner did not write a readable result (exit $status); failing closed"; exit 1
+          fi
+          jq -r '.results[]?.packages[]? | .package.name as $n | .package.version as $v | .groups[]? | "finding: \($n)@\($v) max_severity=\(.max_severity // "unknown") ids=\(.ids | join(","))"' "$out"
+          n="$(jq '[.results[]?.packages[]?.groups[]?] | length' "$out")"
+          echo "osv-scanner exit $status, $n vulnerable package group(s)"
+          case "$status" in
+            0) ;;
+            1) echo "::warning::$n known-vulnerable dependency group(s); report-only, not failing" ;;
+            *) echo "::error::osv-scanner could not finish (exit $status); failing closed"; exit 1 ;;
+          esac
+
+  all-passed:
+    name: Security scans (all passed)
+    needs: [gitleaks, semgrep]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Fail unless every scan job succeeded (skipped, cancelled or failed all count as not passing)
+        env:
+          results: ${{ join(needs.*.result, ' ') }}
+        run: |
+          set -euo pipefail
+          echo "results: $results"
+          n=0
+          for r in $results; do
+            n=$((n+1))
+            if [ "$r" != "success" ]; then echo "::error::a scan job ended with: $r"; exit 1; fi
+          done
+          if [ "$n" -ne 2 ]; then echo "::error::expected 2 scan results, got $n"; exit 1; fi

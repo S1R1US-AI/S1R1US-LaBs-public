@@ -1,0 +1,34 @@
+/* TEAM */
+Site: S1R1US Labs
+Canonical: https://s1r1us.ai/
+X: https://x.com/S1R1US_AI
+GitHub: https://github.com/S1R1US-AI/S1R1US-LaBs-public
+Handle: @S1R1US_AI
+Note: @S1R1S_AI is not the desk.
+
+/* SITE */
+Standards: HTML5, JSON-LD, Open Graph, llms.txt, Agentic Resource Discovery, MCP server card
+Doctype: HTML5
+Language: English
+Mandate: Accumulate bitcoin. Never sell bitcoin. Never short bitcoin.
+Education only. Not financial advice. Not licensed.
+
+/* SEARCH */
+entity.json — Organization + sameAs knowledge panel
+brand.txt — official properties
+video-sitemap.xml — YouTube / Rumble / TikTok when live
+sitemap.xml — pages + images
+search?q= — sitelinks search box
+media — official desks + SUP3R B0WL of AI AGENTs library
+bowl — SUP3R B0WL of AI Agents (AI Agent Championship)
+w0rld — W0rLd CUP of AI Quant Trading BTC
+h1v3 — H1V3 SW@RM (Hive Swarm) · the future of BTC Quant
+l0ck — LoCK3D STATUS (Locked Status) · how to lock and unlock · live vs simulated
+AI-Bitcoin-Trading-Bot.gif — AI Bitcoin Trading Bot = G M0D3 AUTO
+AI-Agent-Lock-System-for-AI-Agent-BTC-Trading-Bot.gif — AI Agent Lock System for AI Agent BTC Trading Bot
+roadmap — OSS Roadmap · functions, go-live status, estimated timeline · full live 2026-12-01 ET
+llms.txt — public instructions module for AI agents (also /.well-known/llms.txt; not /guide)
+/.well-known/ai-catalog.json — Agentic Resource Discovery catalog (Google + industry, June 2026)
+/.well-known/mcp.json — MCP server card (SEP-2127 remotes + SEP-1649 serverInfo)
+c0ut — C@LL 0UT simulation welcome
+compute — How External AI Agents Connect to S1R1US.ai (using external data compute and external data sources)

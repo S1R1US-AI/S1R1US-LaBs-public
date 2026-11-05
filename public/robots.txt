@@ -1,0 +1,56 @@
+# S1R1US.ai robots.txt
+# Search engines (Google, Bing and all others): the full public site.
+# AI crawlers: the FAQ only, for now. To open the full site to them later,
+# change the one "Disallow: /" line in the AI group below to "Allow: /".
+
+User-agent: *
+Allow: /
+Disallow: /*.zip$
+Disallow: /*.tar.gz$
+
+# Search engines: same full crawl rights as above (named so it stays explicit).
+User-agent: Googlebot
+User-agent: Bingbot
+Allow: /
+Disallow: /*.zip$
+Disallow: /*.tar.gz$
+
+# AI crawlers and AI assistants: FAQ only.
+# Google-Extended and Applebot-Extended are opt-out tokens for AI training.
+# They do not change Google Search or Apple search indexing.
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-Web
+User-agent: Claude-User
+User-agent: Claude-SearchBot
+User-agent: anthropic-ai
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: CCBot
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: Bytespider
+User-agent: Meta-ExternalAgent
+User-agent: Meta-ExternalFetcher
+User-agent: Meta-WebIndexer
+User-agent: Amazonbot
+User-agent: cohere-ai
+User-agent: YouBot
+User-agent: DuckAssistBot
+User-agent: MistralAI-User
+User-agent: MistralAI-Index
+User-agent: MistralAI-Training
+User-agent: Diffbot
+User-agent: Grok
+User-agent: xAI
+User-agent: grok-crawler
+Allow: /faq$
+Allow: /faq/
+Allow: /llms.txt
+Disallow: /
+
+Sitemap: https://s1r1us.ai/sitemap-index.xml
+Sitemap: https://s1r1us.ai/sitemap.xml
+Sitemap: https://s1r1us.ai/video-sitemap.xml
