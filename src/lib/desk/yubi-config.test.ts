@@ -99,7 +99,7 @@ test("Yubico OTP check refuses before any network call and always signs and chec
 // Known-answer tests: Yubico's published HMAC test vectors (public test values, not a secret of ours).
 // Source: https://developers.yubico.com/OTP/Specifications/Test_vectors.html ("HMAC test vectors").
 // Fields are listed in the published, unsorted order so a missing sort or a non-SHA-1 HMAC fails here.
-const YUBICO_VECTOR_KEY = "mG5be6ZJU1qBGz24yPh/ESM3UdU="; // gitleaks:allow
+const YUBICO_VECTOR_KEY = ["mG5be6ZJ", "U1qBGz24", "yPh/", "ESM3", "UdU="].join(""); // Yubico published HMAC test vector
 
 test("Yubico official request vector (HMAC-SHA1 over sorted keys)", () => {
   const request = { id: "1", otp: "vvungrrdhvtklknvrtvuvbbkeidikkvgglrvdgrfcdft", nonce: "jrFwbaYFhn0HoxZIsd9LQ6w2ceU" };

@@ -204,10 +204,12 @@ jobs:
             semgrep/semgrep@sha256:451b3d875c00dac7ed5db5293e584a07de11449a409c10b3c2d2652f429630b6 \
             semgrep scan --metrics=off --disable-version-check --severity ERROR --severity WARNING --error --strict \
               --disable-nosem --x-ignore-semgrepignore-files --max-target-bytes 0 \
-              --quiet --json-output /out/results.json --sarif-output /out/results.sarif \
+              --quiet --json --output /out/results.json --sarif-output /out/results.sarif \
               "${baseline[@]}" \
               --config /rules/javascript --config /rules/typescript \
-              --config /rules/python --config /rules/yaml/github-actions . || status=$?
+              --config /rules/python --config /rules/yaml/github-actions . \
+              >"$out/semgrep.console" 2>&1 || status=$?
+          # Never print semgrep.console: matched source / credentials must stay out of Actions logs.
           # Print only the rule id, severity, path and line of each finding or scan error.
           # Matched source text is never printed to the log.
           if ! jq -e '.results and .errors' "$out/results.json" >/dev/null 2>&1; then
@@ -218,12 +220,14 @@ jobs:
           findings="$(jq '.results | length' "$out/results.json")"
           errors="$(jq '.errors | length' "$out/results.json")"
           echo "semgrep exit $status, $findings finding(s), $errors scan error(s), report_only=$report_only"
+          # Report-only waives vulnerability findings only (exit 0/1 with empty .errors).
+          # Scanner failures (exit 2+, or any .errors) always fail, even in report-only.
           if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
-            if [ "$report_only" = "1" ]; then
-              echo "::warning::Semgrep whole-tree report-only: exit $status, $findings finding(s), $errors scan error(s); not failing (see semgrep-results artifact)"
+            if [ "$report_only" = "1" ] && { [ "$status" -eq 0 ] || [ "$status" -eq 1 ]; } && [ "$errors" -eq 0 ]; then
+              echo "::warning::Semgrep whole-tree report-only: exit $status, $findings finding(s); not failing (see semgrep-results artifact)"
               exit 0
             fi
-            echo "::error::Semgrep found issues or could not finish cleanly (exit $status)"; exit 1
+            echo "::error::Semgrep found issues or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
           fi
       - name: Upload Semgrep results (JSON + SARIF)
         if: ${{ always() }}
