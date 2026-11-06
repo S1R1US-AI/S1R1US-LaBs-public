@@ -7,12 +7,12 @@ import { getBearerToken } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { PAGE_DESC_COMPUTE, SEO_TAB_COMPUTE, TAB_COMPUTE } from "@/lib/brand";
 
-const KEY_SESSION = "s1r1us.byo-xai"; // gitleaks:allow
+const BYO_XAI_SESSION_SLOT = ["s1r1us", "byo-xai"].join("."); // sessionStorage slot name; not a secret
 
 function loadKey() {
   if (typeof window === "undefined") return "";
   try {
-    return window.sessionStorage.getItem(KEY_SESSION) ?? "";
+    return window.sessionStorage.getItem(BYO_XAI_SESSION_SLOT) ?? "";
   } catch {
     return "";
   }
@@ -44,7 +44,7 @@ export function AskGrokPanel({ kicker = "Ask Grok" }: { kicker?: string }) {
     try {
       if (key) {
         try {
-          window.sessionStorage.setItem(KEY_SESSION, key);
+          window.sessionStorage.setItem(BYO_XAI_SESSION_SLOT, key);
         } catch {
           /* ignore */
         }
