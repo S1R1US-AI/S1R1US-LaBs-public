@@ -19,6 +19,8 @@ coverage
 .tanstack
 # Build output: DigitalOcean builds it from source in the Dockerfile. Never commit it.
 .output
+# CodeQL SARIF written by the analyze action when upload is local-only.
+/codeql-sarif/
 artifacts/*.env
 
 # CDN media fetched at build time (scripts/fetch-media.mjs, scripts/media-manifest.tsv)

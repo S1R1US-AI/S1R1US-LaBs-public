@@ -5,6 +5,16 @@ name: CodeQL
 # user-owned repo the upload is refused. Advanced setup (this file) is used instead
 # of default setup because default setup scans pushes only to the default and
 # protected branches. Check name for the ruleset: "Analyze (javascript-typescript)".
+#
+# Dependabot cannot upload SARIF. Its push token is read-only, and its pull_request
+# token is still refused by the code scanning API ("Code scanning is not enabled")
+# even with security-events: write. Actions-token runs, including pushes to the
+# default branch, upload successfully, so the repository feature stays on.
+# scripts/codeql-upload-mode.mjs selects upload=never only for that actor off the
+# default branch. CodeQL Action v4.39.3 then skips the upload and still fails the
+# step when the CLI fails. upload=false is not used: that value means failure-only.
+# The SARIF is stored as a workflow artifact. Every other actor keeps upload=always,
+# so an upload error is never ignored.
 
 on:
   push:
@@ -43,6 +53,24 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: none
           queries: security-extended
-      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - name: Choose CodeQL upload mode
+        id: codeql-upload
+        env:
+          CODEQL_ACTOR: ${{ github.actor }}
+          CODEQL_REF: ${{ github.ref }}
+          CODEQL_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node scripts/codeql-upload-mode.mjs
+      - id: codeql-analyze
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: /language:${{ matrix.language }}
+          upload: ${{ steps.codeql-upload.outputs.mode }}
+          output: codeql-sarif
+      - name: Upload CodeQL SARIF artifact
+        if: ${{ success() && steps.codeql-upload.outputs.mode == 'never' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: codeql-sarif-${{ matrix.language }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.codeql-analyze.outputs.sarif-output }}
+          if-no-files-found: error
+          retention-days: 14
