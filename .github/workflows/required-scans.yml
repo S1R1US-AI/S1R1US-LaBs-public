@@ -298,9 +298,10 @@ jobs:
           results_dir: ${{ runner.temp }}/semgrep
         run: |
           set -euo pipefail
-          # Keep rule id, severity, path and line of every finding and error; drop every field that can carry
-          # source text (matched lines, snippets, context regions, metavariable values, fixes, traces, and
-          # messages that can interpolate matched code). Upload runs only when this step succeeds.
+          # JSON: keep rule id, severity, path and line; drop every field that can carry source text.
+          # SARIF: rebuild each result from an allowlist only (ruleId, level, message.text=ruleId,
+          # location uri + start/end line); drop fingerprints/properties/suppressions/snippets/etc.
+          # Upload runs only when this step succeeds; post-check fails closed on any extra key.
           for d in "$results_dir" "$results_dir/new"; do
             json_file="$d/results.json"
             if [ -f "$json_file" ]; then
@@ -315,21 +316,119 @@ jobs:
             fi
             sarif_file="$d/results.sarif"
             if [ -f "$sarif_file" ]; then
+              # Rebuild every result from an allowlist only: ruleId, level, message.text=ruleId,
+              # locations[].physicalLocation.{artifactLocation.uri, region.startLine/endLine}.
+              # Drop fingerprints, properties, suppressions, snippets, codeFlows and every other key.
+              # Tool rules keep id (+ shortDescription if present); drop help/fullDescription.
               n="$(jq '[.runs[].results[]] | length' "$sarif_file")"
               jq '.runs[] |= (
-                  (.results[]? |= (del(.codeFlows, .fixes, .relatedLocations, .stacks, .graphs, .attachments)
-                    | .message = {text: .ruleId}
-                    | (.locations[]?.physicalLocation |= (del(.contextRegion) | (.region? |= (if . == null then . else {startLine, endLine} end))))))
-                  | (.invocations[]?.toolExecutionNotifications[]? |= {level, descriptor, locations: [(.locations[]?.physicalLocation | {physicalLocation: {artifactLocation: {uri: .artifactLocation.uri}, region: {startLine: .region.startLine}}})],
-                      message: {text: "\(.descriptor.id // "error") \(.level // "unknown") \(.locations[0]?.physicalLocation.artifactLocation.uri // ""):\(.locations[0]?.physicalLocation.region.startLine // "")"}})
+                  .tool.driver |= (
+                    {name}
+                    + (if .rules then {
+                        rules: [
+                          .rules[]?
+                          | {id}
+                            + (if (.shortDescription.text // null) != null
+                               then {shortDescription: {text: .shortDescription.text}}
+                               else {} end)
+                        ]
+                      } else {} end)
+                  )
+                  | .results = [
+                      .results[]?
+                      | {
+                          ruleId,
+                          message: {text: .ruleId},
+                          locations: [
+                            .locations[]?
+                            | {
+                                physicalLocation: (
+                                  {artifactLocation: {uri: .physicalLocation.artifactLocation.uri}}
+                                  + (
+                                      ((.physicalLocation.region // {}) | {startLine, endLine}
+                                        | with_entries(select(.value != null))) as $rgn
+                                      | if ($rgn | length) > 0 then {region: $rgn} else {} end
+                                    )
+                                )
+                              }
+                          ]
+                        }
+                        + (if .level != null then {level} else {} end)
+                    ]
+                  | .invocations = [
+                      .invocations[]?
+                      | {
+                          executionSuccessful,
+                          toolExecutionNotifications: [
+                            .toolExecutionNotifications[]?
+                            | {
+                                level,
+                                descriptor: {id: (.descriptor.id // "error")},
+                                message: {
+                                  text: "\(.descriptor.id // "error") \(.level // "unknown") \(.locations[0]?.physicalLocation.artifactLocation.uri // ""):\(.locations[0]?.physicalLocation.region.startLine // "")"
+                                },
+                                locations: [
+                                  .locations[]?
+                                  | {
+                                      physicalLocation: (
+                                        {artifactLocation: {uri: .physicalLocation.artifactLocation.uri}}
+                                        + (
+                                            ((.physicalLocation.region // {}) | {startLine}
+                                              | with_entries(select(.value != null))) as $rgn
+                                            | if ($rgn | length) > 0 then {region: $rgn} else {} end
+                                          )
+                                      )
+                                    }
+                                ]
+                              }
+                          ]
+                        }
+                    ]
+                  | del(.artifacts)
                 )' "$sarif_file" > "$sarif_file.strip"
               mv -- "$sarif_file.strip" "$sarif_file"
               test "$(jq '[.runs[].results[]] | length' "$sarif_file")" = "$n"
-              jq -e '[.. | objects | select(has("snippet") or has("contextRegion") or has("codeFlows") or has("fixes"))] | length == 0' "$sarif_file" >/dev/null \
-                || { echo "::error::source text still present in $sarif_file after stripping; failing closed"; exit 1; }
+              # Fail closed on any key outside the allowlist (recursive walk per result),
+              # on result shape drift, on message.text != ruleId, or on rich tool rule text.
+              jq -e '
+                def allowlisted:
+                  {
+                    ruleId,
+                    message: {text: .ruleId},
+                    locations: [
+                      .locations[]?
+                      | {
+                          physicalLocation: (
+                            {artifactLocation: {uri: .physicalLocation.artifactLocation.uri}}
+                            + (
+                                ((.physicalLocation.region // {}) | {startLine, endLine}
+                                  | with_entries(select(.value != null))) as $rgn
+                                | if ($rgn | length) > 0 then {region: $rgn} else {} end
+                              )
+                          )
+                        }
+                    ]
+                  }
+                  + (if .level != null then {level} else {} end);
+                def walk_keys:
+                  if type == "object" then (keys_unsorted[] as $k | $k, (.[$k] | walk_keys))
+                  elif type == "array" then (.[] | walk_keys)
+                  else empty end;
+                def result_key_allowlist:
+                  ["ruleId","level","message","text","locations","physicalLocation",
+                   "artifactLocation","uri","region","startLine","endLine"];
+                all(.runs[].results[]?; . == allowlisted)
+                and all(.runs[].results[]?;
+                    ([walk_keys] | unique - result_key_allowlist | length) == 0)
+                and ([.runs[].tool.driver.rules[]?
+                      | select(has("fullDescription") or has("help") or has("helpUri")
+                               or has("properties") or has("defaultConfiguration") or has("name"))]
+                     | length) == 0
+              ' "$sarif_file" >/dev/null \
+                || { echo "::error::SARIF result keys outside allowlist or shape changed in $sarif_file; failing closed"; exit 1; }
             fi
           done
-          echo "Semgrep results stripped to rule id, severity, path and line"
+          echo "Semgrep results stripped to allowlisted rule, level and location fields"
       - name: Upload Semgrep results (JSON + SARIF, source text stripped)
         if: ${{ always() && steps.strip.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
