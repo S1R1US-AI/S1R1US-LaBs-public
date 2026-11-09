@@ -253,20 +253,38 @@ jobs:
             fi
           fi
           [ "$full" = "1" ] || exit 0
-          # Blocking pass for schedule / manual runs: anything new since the branch's first-parent commit
-          # from 48 hours ago fails, with the same rules as a ranged scan (nothing waived).
+          # Blocking pass for schedule / manual runs: anything new since the baseline fails, with the same
+          # rules as a ranged scan (nothing waived). Baseline: the older of the first-parent commit from
+          # 48 hours ago and HEAD~20 (first parent), so commit dates alone cannot shrink the window.
           head="$(git rev-parse --verify "HEAD^{commit}")"
-          since="$(git rev-list -1 --first-parent --before='48 hours ago' "$head")"
-          if [ -z "$since" ]; then
-            echo "::error::no commit older than 48 hours to compare against; cannot separate new findings; failing closed"; exit 1
+          by_date="$(git rev-list -1 --first-parent --before='48 hours ago' "$head")"
+          by_count="$(git rev-parse --verify -q "$head~20^{commit}" || true)"
+          since="$by_date"
+          if [ -n "$by_count" ] && { [ -z "$since" ] || git merge-base --is-ancestor "$by_count" "$since"; }; then
+            since="$by_count"
           fi
+          if [ -z "$since" ]; then
+            echo "::error::no baseline commit (none older than 48 hours, fewer than 21 commits); failing closed"; exit 1
+          fi
+          if ! git merge-base --is-ancestor "$since" "$head"; then
+            echo "::error::baseline $since is not an ancestor of $head; failing closed"; exit 1
+          fi
+          now="$(date +%s)"
+          head_time="$(git log -1 --format=%ct "$head")"
+          if [ "$head_time" -gt $((now + 600)) ]; then
+            echo "::warning::$head is dated more than 10 minutes in the future; commit dates are not trusted for the baseline"
+          fi
+          echo "new-findings baseline: $since (by date: ${by_date:-none}, by count: ${by_count:-none})"
           if [ "$since" = "$head" ]; then
-            echo "no commits in the last 48 hours; new-findings pass has nothing new (whole tree reported above)"; exit 0
+            if [ "$head_time" -gt $((now - 172800)) ]; then
+              echo "::warning::baseline equals $head although it is under 48 hours old"
+            fi
+            echo "no commits after the baseline; new-findings pass has nothing new (whole tree reported above)"; exit 0
           fi
           scan "$out/new" --baseline-commit "$since"
           echo "new since $since: semgrep exit $status, $findings finding(s), $errors scan error(s)"
           if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
-            echo "::error::Semgrep found new issues in the last 48 hours or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
+            echo "::error::Semgrep found new issues since the baseline or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
           fi
       - name: Upload Semgrep results (JSON + SARIF)
         if: ${{ always() }}
