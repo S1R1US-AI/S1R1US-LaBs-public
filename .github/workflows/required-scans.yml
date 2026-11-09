@@ -259,12 +259,17 @@ jobs:
           head="$(git rev-parse --verify "HEAD^{commit}")"
           by_date="$(git rev-list -1 --first-parent --before='48 hours ago' "$head")"
           by_count="$(git rev-parse --verify -q "$head~20^{commit}" || true)"
+          if [ -z "$by_count" ]; then
+            # Fewer than 21 first-parent commits: fall back to the first-parent root, never to the date pick alone.
+            by_count="$(git rev-list --max-parents=0 --first-parent "$head" | tail -n 1)"
+            echo "::warning::fewer than 21 first-parent commits, so HEAD~20 does not exist; using the first-parent root ${by_count:-none} as the count baseline"
+          fi
           since="$by_date"
           if [ -n "$by_count" ] && { [ -z "$since" ] || git merge-base --is-ancestor "$by_count" "$since"; }; then
             since="$by_count"
           fi
           if [ -z "$since" ]; then
-            echo "::error::no baseline commit (none older than 48 hours, fewer than 21 commits); failing closed"; exit 1
+            echo "::error::no baseline commit (no date pick and no first-parent root); failing closed"; exit 1
           fi
           if ! git merge-base --is-ancestor "$since" "$head"; then
             echo "::error::baseline $since is not an ancestor of $head; failing closed"; exit 1
