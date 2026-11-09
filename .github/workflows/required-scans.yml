@@ -291,8 +291,47 @@ jobs:
           if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
             echo "::error::Semgrep found new issues since the baseline or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
           fi
-      - name: Upload Semgrep results (JSON + SARIF)
+      - name: Strip source text from Semgrep results before upload (fail closed)
+        id: strip
         if: ${{ always() }}
+        env:
+          results_dir: ${{ runner.temp }}/semgrep
+        run: |
+          set -euo pipefail
+          # Keep rule id, severity, path and line of every finding and error; drop every field that can carry
+          # source text (matched lines, snippets, context regions, metavariable values, fixes, traces, and
+          # messages that can interpolate matched code). Upload runs only when this step succeeds.
+          for d in "$results_dir" "$results_dir/new"; do
+            json_file="$d/results.json"
+            if [ -f "$json_file" ]; then
+              n="$(jq '.results | length' "$json_file")"
+              jq '(.results[] |= {check_id, path, start: {line: .start.line}, end: {line: .end.line}, extra: {severity: .extra.severity}})
+                | (.errors[] |= ({type: (.type | if type == "array" then .[0] else . end), level, path: (.path // ""), line: (.spans[0]?.start.line // null)}
+                  | .message = "\(.type) \(.level // "unknown") \(.path):\(.line // "")"))' "$json_file" > "$json_file.strip"
+              mv -- "$json_file.strip" "$json_file"
+              test "$(jq '.results | length' "$json_file")" = "$n"
+              jq -e '[.. | objects | select(has("lines") or has("snippet") or has("contextRegion") or has("metavars") or has("fix") or has("dataflow_trace") or has("spans"))] | length == 0' "$json_file" >/dev/null \
+                || { echo "::error::source text still present in $json_file after stripping; failing closed"; exit 1; }
+            fi
+            sarif_file="$d/results.sarif"
+            if [ -f "$sarif_file" ]; then
+              n="$(jq '[.runs[].results[]] | length' "$sarif_file")"
+              jq '.runs[] |= (
+                  (.results[]? |= (del(.codeFlows, .fixes, .relatedLocations, .stacks, .graphs, .attachments)
+                    | .message = {text: .ruleId}
+                    | (.locations[]?.physicalLocation |= (del(.contextRegion) | (.region? |= (if . == null then . else {startLine, endLine} end))))))
+                  | (.invocations[]?.toolExecutionNotifications[]? |= {level, descriptor, locations: [(.locations[]?.physicalLocation | {physicalLocation: {artifactLocation: {uri: .artifactLocation.uri}, region: {startLine: .region.startLine}}})],
+                      message: {text: "\(.descriptor.id // "error") \(.level // "unknown") \(.locations[0]?.physicalLocation.artifactLocation.uri // ""):\(.locations[0]?.physicalLocation.region.startLine // "")"}})
+                )' "$sarif_file" > "$sarif_file.strip"
+              mv -- "$sarif_file.strip" "$sarif_file"
+              test "$(jq '[.runs[].results[]] | length' "$sarif_file")" = "$n"
+              jq -e '[.. | objects | select(has("snippet") or has("contextRegion") or has("codeFlows") or has("fixes"))] | length == 0' "$sarif_file" >/dev/null \
+                || { echo "::error::source text still present in $sarif_file after stripping; failing closed"; exit 1; }
+            fi
+          done
+          echo "Semgrep results stripped to rule id, severity, path and line"
+      - name: Upload Semgrep results (JSON + SARIF, source text stripped)
+        if: ${{ always() && steps.strip.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: semgrep-results-${{ github.event_name }}-${{ github.run_id }}
