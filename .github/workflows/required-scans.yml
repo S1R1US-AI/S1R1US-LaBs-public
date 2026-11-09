@@ -12,10 +12,12 @@ on:
   push:
     branches: ['**']
     tags: ['**']
-  # Weekly full-history gitleaks + whole-tree Semgrep on main (no before-commit on a schedule, so the
+  # Daily and manual (Run workflow) full scans: full-history gitleaks (blocking) + whole-tree Semgrep report
+  # with a blocking check for findings new in the last 48 hours of the branch (no before-commit, so the
   # base pick returns full history). Replaces the old main-only leak-scan.yml (02 B6).
   schedule:
-    - cron: '41 8 * * 1'
+    - cron: '23 9 * * *'
+  workflow_dispatch:
 
 permissions: {}
 
@@ -78,6 +80,9 @@ jobs:
           }
           if [ "$event" = "pull_request" ]; then
             base="$pr_base"; head="$pr_head"
+          elif [ "$event" = "schedule" ] || [ "$event" = "workflow_dispatch" ]; then
+            # Full scan: never a range, never the "already on default" shortcut.
+            base=""; head="$push_after"
           else
             head="$push_after"; base="$(pick_push_base "$push_before" "$head")"
             if [ "$base" = "on-default" ]; then echo "0 new commits: $head is already on the default branch (scanned there)"; exit 0; fi
@@ -90,8 +95,8 @@ jobs:
           if [ -n "$base" ]; then
             git cat-file -e "$base^{commit}"
             range="$base..$head"
-          elif [ "$event" = "push" ] || [ "$event" = "schedule" ]; then
-            echo "no base found; scanning the full history of $head"
+          elif [ "$event" = "push" ] || [ "$event" = "schedule" ] || [ "$event" = "workflow_dispatch" ]; then
+            echo "no base found or full scan ($event); scanning the full history of $head"
             range="$head"
           else
             echo "::error::no usable commit range ($event); failing closed"; exit 1
@@ -118,7 +123,15 @@ jobs:
           GIT_ATTR_SOURCE="$(git hash-object -t tree -w /dev/null)"
           export GIT_ATTR_SOURCE
           # -m also scans each merge commit against every one of its parents.
-          "$HOME/scan-tools/gitleaks" git --redact --no-banner --exit-code 1 --ignore-gitleaks-allow --config "$cfg/gitleaks.toml" --gitleaks-ignore-path "$cfg/ignore" --log-opts="--text -m $range" .
+          status=0
+          "$HOME/scan-tools/gitleaks" git --redact --no-banner --exit-code 1 --ignore-gitleaks-allow --config "$cfg/gitleaks.toml" --gitleaks-ignore-path "$cfg/ignore" \
+            --report-format json --report-path "$cfg/report.json" --log-opts="--text -m $range" . || status=$?
+          # Print only rule id, path, line and commit of each finding (never the matched text or secret).
+          if [ -s "$cfg/report.json" ]; then
+            jq -r '.[] | "finding: rule=\(.RuleID) path=\(.File | tojson) line=\(.StartLine) commit=\(.Commit)"' "$cfg/report.json" || status=1
+          fi
+          echo "gitleaks exit $status ($event, $n commit(s))"
+          exit "$status"
 
   semgrep:
     name: Semgrep (JS/TS, Python, Actions)
@@ -171,8 +184,11 @@ jobs:
             if [ -n "$mb" ]; then echo "$mb"; return; fi
             echo ""
           }
-          # Mode: ranged (blocking), full-report (schedule / no-base push; report-only), fail (PR with no/ambiguous base).
-          if [ "$event" = "pull_request" ]; then base="$pr_base"; else base="$(pick_push_base "$push_before" "$push_after")"; fi
+          # Mode: ranged (blocking), full-report (schedule / manual / no-base push; report-only), fail (PR with no/ambiguous base).
+          # Schedule and manual runs also run a blocking pass for findings new in the last 48 hours (below).
+          full=0
+          if [ "$event" = "schedule" ] || [ "$event" = "workflow_dispatch" ]; then full=1; base=""
+          elif [ "$event" = "pull_request" ]; then base="$pr_base"; else base="$(pick_push_base "$push_before" "$push_after")"; fi
           if [ "$base" = "on-default" ]; then echo "0 new commits: already on the default branch (scanned there)"; exit 0; fi
           baseline=()
           report_only=0
@@ -182,8 +198,8 @@ jobs:
             esac
             git cat-file -e "$base^{commit}"
             baseline=(--baseline-commit "$base")
-          elif [ "$event" = "push" ] || [ "$event" = "schedule" ]; then
-            # B7: whole-tree Semgrep on first push to default / weekly schedule is report-only so main can go green.
+          elif [ "$event" = "push" ] || [ "$event" = "schedule" ] || [ "$event" = "workflow_dispatch" ]; then
+            # B7: whole-tree Semgrep on first push to default / daily or manual full scan is report-only so main can go green.
             # Gitleaks stays blocking. PR and ranged-push Semgrep stay blocking. Report-only is temporary (burn-down).
             echo "no baseline found; scanning the whole tree (report-only: pre-existing findings do not fail the job)"
             report_only=1
@@ -197,37 +213,60 @@ jobs:
           # --disable-nosem and --x-ignore-semgrepignore-files stop inline nosemgrep comments and
           # .semgrepignore files in the scanned tree from hiding a finding (the image is pinned, so the flags stay).
           out="$RUNNER_TEMP/semgrep"
-          mkdir -p "$out"
-          status=0
-          docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp \
-            -v "$PWD:/src" -v "$HOME/scan-tools/rules:/rules:ro" -v "$out:/out" -w /src \
-            semgrep/semgrep@sha256:451b3d875c00dac7ed5db5293e584a07de11449a409c10b3c2d2652f429630b6 \
-            semgrep scan --metrics=off --disable-version-check --severity ERROR --severity WARNING --error --strict \
-              --disable-nosem --x-ignore-semgrepignore-files --max-target-bytes 0 \
-              --quiet --json --output /out/results.json --sarif-output /out/results.sarif \
-              "${baseline[@]}" \
-              --config /rules/javascript --config /rules/typescript \
-              --config /rules/python --config /rules/yaml/github-actions . \
-              >"$out/semgrep.console" 2>&1 || status=$?
-          # Never print semgrep.console: matched source / credentials must stay out of Actions logs.
-          # Print only the rule id, severity, path and line of each finding or scan error.
-          # Matched source text is never printed to the log.
-          if ! jq -e '.results and .errors' "$out/results.json" >/dev/null 2>&1; then
-            echo "::error::Semgrep did not write a readable result (exit $status); failing closed"; exit 1
-          fi
-          jq -r '.results[] | "finding: rule=\(.check_id) severity=\(.extra.severity // "unknown") path=\(.path | tojson) line=\(.start.line)"' "$out/results.json"
-          jq -r '.errors[] | "scan error: level=\(.level // "unknown") type=\(.type | if type == "array" then .[0] else . end | tojson) path=\(.path // "" | tojson) line=\(.spans[0]?.start.line // "")"' "$out/results.json"
-          findings="$(jq '.results | length' "$out/results.json")"
-          errors="$(jq '.errors | length' "$out/results.json")"
-          echo "semgrep exit $status, $findings finding(s), $errors scan error(s), report_only=$report_only"
-          # Report-only waives vulnerability findings only (exit 0/1 with empty .errors).
-          # Scanner failures (exit 2+, or any .errors) always fail, even in report-only.
-          if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
-            if [ "$report_only" = "1" ] && { [ "$status" -eq 0 ] || [ "$status" -eq 1 ]; } && [ "$errors" -eq 0 ]; then
-              echo "::warning::Semgrep whole-tree report-only: exit $status, $findings finding(s); not failing (see semgrep-results artifact)"
-              exit 0
+          scan() {  # scan <out dir> [--baseline-commit <sha>]; sets status, findings, errors, parse_warn
+            local out="$1"; shift
+            mkdir -p "$out"
+            status=0
+            docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp \
+              -v "$PWD:/src" -v "$HOME/scan-tools/rules:/rules:ro" -v "$out:/out" -w /src \
+              semgrep/semgrep@sha256:451b3d875c00dac7ed5db5293e584a07de11449a409c10b3c2d2652f429630b6 \
+              semgrep scan --metrics=off --disable-version-check --severity ERROR --severity WARNING --error --strict \
+                --disable-nosem --x-ignore-semgrepignore-files --max-target-bytes 0 \
+                --quiet --json --output /out/results.json --sarif-output /out/results.sarif \
+                "$@" \
+                --config /rules/javascript --config /rules/typescript \
+                --config /rules/python --config /rules/yaml/github-actions . \
+                >"$out/semgrep.console" 2>&1 || status=$?
+            # Never print semgrep.console: matched source / credentials must stay out of Actions logs.
+            # Print only the rule id, severity, path and line of each finding or scan error.
+            # Matched source text is never printed to the log.
+            if ! jq -e '.results and .errors' "$out/results.json" >/dev/null 2>&1; then
+              echo "::error::Semgrep did not write a readable result (exit $status); failing closed"; exit 1
             fi
-            echo "::error::Semgrep found issues or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
+            jq -r '.results[] | "finding: rule=\(.check_id) severity=\(.extra.severity // "unknown") path=\(.path | tojson) line=\(.start.line)"' "$out/results.json"
+            jq -r '.errors[] | "scan error: level=\(.level // "unknown") type=\(.type | if type == "array" then .[0] else . end | tojson) path=\(.path // "" | tojson) line=\(.spans[0]?.start.line // "")"' "$out/results.json"
+            findings="$(jq '.results | length' "$out/results.json")"
+            errors="$(jq '.errors | length' "$out/results.json")"
+            # Warn-level partial parses only; every other error type or level stays a hard scan error.
+            parse_warn="$(jq '[.errors[] | select(.level == "warn" and ((.type | if type == "array" then .[0] else . end) == "PartialParsing"))] | length' "$out/results.json")"
+          }
+          scan "$out" "${baseline[@]}"
+          echo "semgrep exit $status, $findings finding(s), $errors scan error(s) ($parse_warn partial parse), report_only=$report_only"
+          # Report-only waives vulnerability findings and warn-level partial parses of the existing tree only
+          # (exit 0/1, no other scan error). Scanner failures (exit 2+, or any other error) always fail.
+          # Ranged scans (pull requests, pushes) waive nothing.
+          if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
+            if [ "$report_only" = "1" ] && { [ "$status" -eq 0 ] || [ "$status" -eq 1 ]; } && [ "$errors" -eq "$parse_warn" ]; then
+              echo "::warning::Semgrep whole-tree report-only: exit $status, $findings finding(s), $parse_warn partial parse warning(s); not failing (see semgrep-results artifact)"
+            else
+              echo "::error::Semgrep found issues or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
+            fi
+          fi
+          [ "$full" = "1" ] || exit 0
+          # Blocking pass for schedule / manual runs: anything new since the branch's first-parent commit
+          # from 48 hours ago fails, with the same rules as a ranged scan (nothing waived).
+          head="$(git rev-parse --verify "HEAD^{commit}")"
+          since="$(git rev-list -1 --first-parent --before='48 hours ago' "$head")"
+          if [ -z "$since" ]; then
+            echo "::error::no commit older than 48 hours to compare against; cannot separate new findings; failing closed"; exit 1
+          fi
+          if [ "$since" = "$head" ]; then
+            echo "no commits in the last 48 hours; new-findings pass has nothing new (whole tree reported above)"; exit 0
+          fi
+          scan "$out/new" --baseline-commit "$since"
+          echo "new since $since: semgrep exit $status, $findings finding(s), $errors scan error(s)"
+          if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
+            echo "::error::Semgrep found new issues in the last 48 hours or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
           fi
       - name: Upload Semgrep results (JSON + SARIF)
         if: ${{ always() }}
@@ -237,6 +276,8 @@ jobs:
           path: |
             ${{ runner.temp }}/semgrep/results.json
             ${{ runner.temp }}/semgrep/results.sarif
+            ${{ runner.temp }}/semgrep/new/results.json
+            ${{ runner.temp }}/semgrep/new/results.sarif
           if-no-files-found: ignore
           retention-days: 14
 
