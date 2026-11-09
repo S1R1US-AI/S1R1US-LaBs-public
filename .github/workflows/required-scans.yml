@@ -108,12 +108,11 @@ jobs:
           cfg="$RUNNER_TEMP/gitleaks"
           mkdir -p "$cfg/ignore"
           # Exact fingerprint list. Any change fails the pin check.
-          cat > "$cfg/ignore/.gitleaksignore" <<'fp_list'
-          bd32e9352d43e9e911da100d0c8a0cab022b7d96:src/components/ask-grok-panel.tsx:generic-api-key:10
-          bd32e9352d43e9e911da100d0c8a0cab022b7d96:src/lib/desk/support.ts:generic-api-key:6
-          bd32e9352d43e9e911da100d0c8a0cab022b7d96:src/lib/desk/support.ts:generic-api-key:7
-          bd32e9352d43e9e911da100d0c8a0cab022b7d96:src/lib/desk/yubi-config.test.ts:generic-api-key:102
-          fp_list
+          printf '%s\n' \
+            'bd32e9352d43e9e911da100d0c8a0cab022b7d96:src/components/ask-grok-panel.tsx:generic-api-key:10' \
+            'bd32e9352d43e9e911da100d0c8a0cab022b7d96:src/lib/desk/support.ts:generic-api-key:6' \
+            'bd32e9352d43e9e911da100d0c8a0cab022b7d96:src/lib/desk/support.ts:generic-api-key:7' \
+            'bd32e9352d43e9e911da100d0c8a0cab022b7d96:src/lib/desk/yubi-config.test.ts:generic-api-key:102' > "$cfg/ignore/.gitleaksignore"
           echo "3472276ae7f87d6c48737793c9769dca0e5933af79edffc8c9fb3b8a319a1c4d  $cfg/ignore/.gitleaksignore" | sha256sum -c - || { echo "::error::ignore list checksum mismatch; failing closed"; exit 1; }
           [ "$(wc -l < "$cfg/ignore/.gitleaksignore")" -eq 4 ] || { echo "::error::ignore list must have exactly 4 lines; failing closed"; exit 1; }
           # Trusted rules: the gitleaks v8.30.1 defaults, checksum pinned. Removed: the global path allowlist
