@@ -12,10 +12,12 @@ on:
   push:
     branches: ['**']
     tags: ['**']
-  # Weekly full-history gitleaks + whole-tree Semgrep on main (no before-commit on a schedule, so the
+  # Daily and manual (Run workflow) full scans: full-history gitleaks (blocking) + whole-tree Semgrep report
+  # with a blocking check for findings new in the last 48 hours of the branch (no before-commit, so the
   # base pick returns full history). Replaces the old main-only leak-scan.yml (02 B6).
   schedule:
-    - cron: '41 8 * * 1'
+    - cron: '23 9 * * *'
+  workflow_dispatch:
 
 permissions: {}
 
@@ -78,6 +80,9 @@ jobs:
           }
           if [ "$event" = "pull_request" ]; then
             base="$pr_base"; head="$pr_head"
+          elif [ "$event" = "schedule" ] || [ "$event" = "workflow_dispatch" ]; then
+            # Full scan: never a range, never the "already on default" shortcut.
+            base=""; head="$push_after"
           else
             head="$push_after"; base="$(pick_push_base "$push_before" "$head")"
             if [ "$base" = "on-default" ]; then echo "0 new commits: $head is already on the default branch (scanned there)"; exit 0; fi
@@ -90,8 +95,8 @@ jobs:
           if [ -n "$base" ]; then
             git cat-file -e "$base^{commit}"
             range="$base..$head"
-          elif [ "$event" = "push" ] || [ "$event" = "schedule" ]; then
-            echo "no base found; scanning the full history of $head"
+          elif [ "$event" = "push" ] || [ "$event" = "schedule" ] || [ "$event" = "workflow_dispatch" ]; then
+            echo "no base found or full scan ($event); scanning the full history of $head"
             range="$head"
           else
             echo "::error::no usable commit range ($event); failing closed"; exit 1
@@ -118,7 +123,15 @@ jobs:
           GIT_ATTR_SOURCE="$(git hash-object -t tree -w /dev/null)"
           export GIT_ATTR_SOURCE
           # -m also scans each merge commit against every one of its parents.
-          "$HOME/scan-tools/gitleaks" git --redact --no-banner --exit-code 1 --ignore-gitleaks-allow --config "$cfg/gitleaks.toml" --gitleaks-ignore-path "$cfg/ignore" --log-opts="--text -m $range" .
+          status=0
+          "$HOME/scan-tools/gitleaks" git --redact --no-banner --exit-code 1 --ignore-gitleaks-allow --config "$cfg/gitleaks.toml" --gitleaks-ignore-path "$cfg/ignore" \
+            --report-format json --report-path "$cfg/report.json" --log-opts="--text -m $range" . || status=$?
+          # Print only rule id, path, line and commit of each finding (never the matched text or secret).
+          if [ -s "$cfg/report.json" ]; then
+            jq -r '.[] | "finding: rule=\(.RuleID) path=\(.File | tojson) line=\(.StartLine) commit=\(.Commit)"' "$cfg/report.json" || status=1
+          fi
+          echo "gitleaks exit $status ($event, $n commit(s))"
+          exit "$status"
 
   semgrep:
     name: Semgrep (JS/TS, Python, Actions)
@@ -171,8 +184,11 @@ jobs:
             if [ -n "$mb" ]; then echo "$mb"; return; fi
             echo ""
           }
-          # Mode: ranged (blocking), full-report (schedule / no-base push; report-only), fail (PR with no/ambiguous base).
-          if [ "$event" = "pull_request" ]; then base="$pr_base"; else base="$(pick_push_base "$push_before" "$push_after")"; fi
+          # Mode: ranged (blocking), full-report (schedule / manual / no-base push; report-only), fail (PR with no/ambiguous base).
+          # Schedule and manual runs also run a blocking pass for findings new in the last 48 hours (below).
+          full=0
+          if [ "$event" = "schedule" ] || [ "$event" = "workflow_dispatch" ]; then full=1; base=""
+          elif [ "$event" = "pull_request" ]; then base="$pr_base"; else base="$(pick_push_base "$push_before" "$push_after")"; fi
           if [ "$base" = "on-default" ]; then echo "0 new commits: already on the default branch (scanned there)"; exit 0; fi
           baseline=()
           report_only=0
@@ -182,8 +198,8 @@ jobs:
             esac
             git cat-file -e "$base^{commit}"
             baseline=(--baseline-commit "$base")
-          elif [ "$event" = "push" ] || [ "$event" = "schedule" ]; then
-            # B7: whole-tree Semgrep on first push to default / weekly schedule is report-only so main can go green.
+          elif [ "$event" = "push" ] || [ "$event" = "schedule" ] || [ "$event" = "workflow_dispatch" ]; then
+            # B7: whole-tree Semgrep on first push to default / daily or manual full scan is report-only so main can go green.
             # Gitleaks stays blocking. PR and ranged-push Semgrep stay blocking. Report-only is temporary (burn-down).
             echo "no baseline found; scanning the whole tree (report-only: pre-existing findings do not fail the job)"
             report_only=1
@@ -197,46 +213,261 @@ jobs:
           # --disable-nosem and --x-ignore-semgrepignore-files stop inline nosemgrep comments and
           # .semgrepignore files in the scanned tree from hiding a finding (the image is pinned, so the flags stay).
           out="$RUNNER_TEMP/semgrep"
-          mkdir -p "$out"
-          status=0
-          docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp \
-            -v "$PWD:/src" -v "$HOME/scan-tools/rules:/rules:ro" -v "$out:/out" -w /src \
-            semgrep/semgrep@sha256:451b3d875c00dac7ed5db5293e584a07de11449a409c10b3c2d2652f429630b6 \
-            semgrep scan --metrics=off --disable-version-check --severity ERROR --severity WARNING --error --strict \
-              --disable-nosem --x-ignore-semgrepignore-files --max-target-bytes 0 \
-              --quiet --json --output /out/results.json --sarif-output /out/results.sarif \
-              "${baseline[@]}" \
-              --config /rules/javascript --config /rules/typescript \
-              --config /rules/python --config /rules/yaml/github-actions . \
-              >"$out/semgrep.console" 2>&1 || status=$?
-          # Never print semgrep.console: matched source / credentials must stay out of Actions logs.
-          # Print only the rule id, severity, path and line of each finding or scan error.
-          # Matched source text is never printed to the log.
-          if ! jq -e '.results and .errors' "$out/results.json" >/dev/null 2>&1; then
-            echo "::error::Semgrep did not write a readable result (exit $status); failing closed"; exit 1
-          fi
-          jq -r '.results[] | "finding: rule=\(.check_id) severity=\(.extra.severity // "unknown") path=\(.path | tojson) line=\(.start.line)"' "$out/results.json"
-          jq -r '.errors[] | "scan error: level=\(.level // "unknown") type=\(.type | if type == "array" then .[0] else . end | tojson) path=\(.path // "" | tojson) line=\(.spans[0]?.start.line // "")"' "$out/results.json"
-          findings="$(jq '.results | length' "$out/results.json")"
-          errors="$(jq '.errors | length' "$out/results.json")"
-          echo "semgrep exit $status, $findings finding(s), $errors scan error(s), report_only=$report_only"
-          # Report-only waives vulnerability findings only (exit 0/1 with empty .errors).
-          # Scanner failures (exit 2+, or any .errors) always fail, even in report-only.
-          if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
-            if [ "$report_only" = "1" ] && { [ "$status" -eq 0 ] || [ "$status" -eq 1 ]; } && [ "$errors" -eq 0 ]; then
-              echo "::warning::Semgrep whole-tree report-only: exit $status, $findings finding(s); not failing (see semgrep-results artifact)"
-              exit 0
+          scan() {  # scan <out dir> [--baseline-commit <sha>]; sets status, findings, errors, parse_warn
+            local out="$1"; shift
+            mkdir -p "$out"
+            status=0
+            docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp \
+              -v "$PWD:/src" -v "$HOME/scan-tools/rules:/rules:ro" -v "$out:/out" -w /src \
+              semgrep/semgrep@sha256:451b3d875c00dac7ed5db5293e584a07de11449a409c10b3c2d2652f429630b6 \
+              semgrep scan --metrics=off --disable-version-check --severity ERROR --severity WARNING --error --strict \
+                --disable-nosem --x-ignore-semgrepignore-files --max-target-bytes 0 \
+                --quiet --json --output /out/results.json --sarif-output /out/results.sarif \
+                "$@" \
+                --config /rules/javascript --config /rules/typescript \
+                --config /rules/python --config /rules/yaml/github-actions . \
+                >"$out/semgrep.console" 2>&1 || status=$?
+            # Never print semgrep.console: matched source / credentials must stay out of Actions logs.
+            # Print only the rule id, severity, path and line of each finding or scan error.
+            # Matched source text is never printed to the log.
+            if ! jq -e '.results and .errors' "$out/results.json" >/dev/null 2>&1; then
+              echo "::error::Semgrep did not write a readable result (exit $status); failing closed"; exit 1
             fi
-            echo "::error::Semgrep found issues or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
+            jq -r '.results[] | "finding: rule=\(.check_id) severity=\(.extra.severity // "unknown") path=\(.path | tojson) line=\(.start.line)"' "$out/results.json"
+            jq -r '.errors[] | "scan error: level=\(.level // "unknown") type=\(.type | if type == "array" then .[0] else . end | tojson) path=\(.path // "" | tojson) line=\(.spans[0]?.start.line // "")"' "$out/results.json"
+            findings="$(jq '.results | length' "$out/results.json")"
+            errors="$(jq '.errors | length' "$out/results.json")"
+            # Warn-level partial parses only; every other error type or level stays a hard scan error.
+            parse_warn="$(jq '[.errors[] | select(.level == "warn" and ((.type | if type == "array" then .[0] else . end) == "PartialParsing"))] | length' "$out/results.json")"
+          }
+          scan "$out" "${baseline[@]}"
+          echo "semgrep exit $status, $findings finding(s), $errors scan error(s) ($parse_warn partial parse), report_only=$report_only"
+          # Report-only waives vulnerability findings and warn-level partial parses of the existing tree only
+          # (exit 0/1, no other scan error). Scanner failures (exit 2+, or any other error) always fail.
+          # Ranged scans (pull requests, pushes) waive nothing.
+          if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
+            if [ "$report_only" = "1" ] && { [ "$status" -eq 0 ] || [ "$status" -eq 1 ]; } && [ "$errors" -eq "$parse_warn" ]; then
+              echo "::warning::Semgrep whole-tree report-only: exit $status, $findings finding(s), $parse_warn partial parse warning(s); not failing (see semgrep-results artifact)"
+            else
+              echo "::error::Semgrep found issues or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
+            fi
           fi
-      - name: Upload Semgrep results (JSON + SARIF)
+          [ "$full" = "1" ] || exit 0
+          # Blocking pass for schedule / manual runs: anything new since the baseline fails, with the same
+          # rules as a ranged scan (nothing waived). Baseline: the older of the first-parent commit from
+          # 48 hours ago and HEAD~20 (first parent), so commit dates alone cannot shrink the window.
+          head="$(git rev-parse --verify "HEAD^{commit}")"
+          by_date="$(git rev-list -1 --first-parent --before='48 hours ago' "$head")"
+          by_count="$(git rev-parse --verify -q "$head~20^{commit}" || true)"
+          if [ -z "$by_count" ]; then
+            # Fewer than 21 first-parent commits: fall back to the first-parent root, never to the date pick alone.
+            by_count="$(git rev-list --max-parents=0 --first-parent "$head" | tail -n 1)"
+            echo "::warning::fewer than 21 first-parent commits, so HEAD~20 does not exist; using the first-parent root ${by_count:-none} as the count baseline"
+          fi
+          since="$by_date"
+          if [ -n "$by_count" ] && { [ -z "$since" ] || git merge-base --is-ancestor "$by_count" "$since"; }; then
+            since="$by_count"
+          fi
+          if [ -z "$since" ]; then
+            echo "::error::no baseline commit (no date pick and no first-parent root); failing closed"; exit 1
+          fi
+          if ! git merge-base --is-ancestor "$since" "$head"; then
+            echo "::error::baseline $since is not an ancestor of $head; failing closed"; exit 1
+          fi
+          now="$(date +%s)"
+          head_time="$(git log -1 --format=%ct "$head")"
+          if [ "$head_time" -gt $((now + 600)) ]; then
+            echo "::warning::$head is dated more than 10 minutes in the future; commit dates are not trusted for the baseline"
+          fi
+          echo "new-findings baseline: $since (by date: ${by_date:-none}, by count: ${by_count:-none})"
+          if [ "$since" = "$head" ]; then
+            if [ "$head_time" -gt $((now - 172800)) ]; then
+              echo "::warning::baseline equals $head although it is under 48 hours old"
+            fi
+            echo "no commits after the baseline; new-findings pass has nothing new (whole tree reported above)"; exit 0
+          fi
+          scan "$out/new" --baseline-commit "$since"
+          echo "new since $since: semgrep exit $status, $findings finding(s), $errors scan error(s)"
+          if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
+            echo "::error::Semgrep found new issues since the baseline or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
+          fi
+      - name: Strip source text from Semgrep results before upload (fail closed)
+        id: strip
         if: ${{ always() }}
+        env:
+          results_dir: ${{ runner.temp }}/semgrep
+        run: |
+          set -euo pipefail
+          # Rebuild Semgrep JSON and SARIF from allowlists only (whole document).
+          # JSON: keep Semgrep version as scanner identity; results/errors stripped to
+          # id/severity/path/line; paths.scanned only. Drop skipped reasons, time, explanations.
+          # SARIF: fixed $schema + version constants; runs rebuild to tool.driver, results,
+          # invocations with executionSuccessful only. Upload only if strip succeeds.
+          sarif_schema='https://json.schemastore.org/sarif-2.1.0.json'
+          sarif_version='2.1.0'
+          for d in "$results_dir" "$results_dir/new"; do
+            json_file="$d/results.json"
+            if [ -f "$json_file" ]; then
+              n="$(jq '.results | length' "$json_file")"
+              jq '{
+                  version,
+                  results: [
+                    .results[]?
+                    | {
+                        check_id,
+                        path,
+                        start: {line: .start.line},
+                        end: {line: .end.line},
+                        extra: {severity: .extra.severity}
+                      }
+                  ],
+                  errors: [
+                    .errors[]?
+                    | ({
+                        type: (.type | if type == "array" then .[0] else . end),
+                        level,
+                        path: (.path // ""),
+                        line: (.spans[0]?.start.line // null)
+                      }
+                      | .message = "\(.type) \(.level // "unknown") \(.path):\(.line // "")")
+                  ],
+                  paths: {scanned: (.paths.scanned // [])}
+                }' "$json_file" > "$json_file.strip"
+              mv -- "$json_file.strip" "$json_file"
+              test "$(jq '.results | length' "$json_file")" = "$n"
+              jq -e '
+                def walk_keys:
+                  if type == "object" then (keys_unsorted[] as $k | $k, (.[$k] | walk_keys))
+                  elif type == "array" then (.[] | walk_keys)
+                  else empty end;
+                def allowlist:
+                  ["version","results","errors","paths","scanned",
+                   "check_id","path","start","end","line","extra","severity",
+                   "type","level","message"];
+                ([walk_keys] | unique - allowlist | length) == 0
+                and (.paths | keys_unsorted == ["scanned"])
+                and ((keys_unsorted | sort) == (["errors","paths","results","version"] | sort)
+                     or (keys_unsorted | sort) == (["errors","paths","results"] | sort))
+                and all(.results[]?;
+                    (keys_unsorted | sort) == (["check_id","end","extra","path","start"] | sort)
+                    and (.start | keys_unsorted == ["line"])
+                    and (.end | keys_unsorted == ["line"])
+                    and (.extra | keys_unsorted == ["severity"]))
+                and all(.errors[]?;
+                    ((keys_unsorted | sort)
+                      - (["type","level","path","line","message"] | sort)
+                      | length) == 0)
+              ' "$json_file" >/dev/null \
+                || { echo "::error::JSON keys outside allowlist or shape changed in $json_file; failing closed"; exit 1; }
+            fi
+            sarif_file="$d/results.sarif"
+            if [ -f "$sarif_file" ]; then
+              n="$(jq '[.runs[].results[]] | length' "$sarif_file")"
+              jq --arg schema "$sarif_schema" --arg ver "$sarif_version" '
+                {
+                  "$schema": $schema,
+                  version: $ver,
+                  runs: [
+                    .runs[]?
+                    | {
+                        tool: {
+                          driver: (
+                            {name: .tool.driver.name}
+                            + (if .tool.driver.rules then {
+                                rules: [
+                                  .tool.driver.rules[]?
+                                  | {id}
+                                    + (if (.shortDescription.text // null) != null
+                                       then {shortDescription: {text: .shortDescription.text}}
+                                       else {} end)
+                                ]
+                              } else {} end)
+                          )
+                        },
+                        results: [
+                          .results[]?
+                          | {
+                              ruleId,
+                              message: {text: .ruleId},
+                              locations: [
+                                .locations[]?
+                                | {
+                                    physicalLocation: (
+                                      {artifactLocation: {uri: .physicalLocation.artifactLocation.uri}}
+                                      + (
+                                          ((.physicalLocation.region // {}) | {startLine, endLine}
+                                            | with_entries(select(.value != null))) as $rgn
+                                          | if ($rgn | length) > 0 then {region: $rgn} else {} end
+                                        )
+                                    )
+                                  }
+                              ]
+                            }
+                            + (if .level != null then {level} else {} end)
+                        ],
+                        invocations: [
+                          .invocations[]?
+                          | {executionSuccessful}
+                        ]
+                      }
+                  ]
+                }' "$sarif_file" > "$sarif_file.strip"
+              mv -- "$sarif_file.strip" "$sarif_file"
+              test "$(jq '[.runs[].results[]] | length' "$sarif_file")" = "$n"
+              jq -e --arg schema "$sarif_schema" --arg ver "$sarif_version" '
+                def walk_keys:
+                  if type == "object" then (keys_unsorted[] as $k | $k, (.[$k] | walk_keys))
+                  elif type == "array" then (.[] | walk_keys)
+                  else empty end;
+                def allowlist:
+                  ["$schema","version","runs",
+                   "tool","driver","name","rules","id","shortDescription","text",
+                   "results","ruleId","level","message","locations","physicalLocation",
+                   "artifactLocation","uri","region","startLine","endLine",
+                   "invocations","executionSuccessful"];
+                .["$schema"] == $schema
+                and .version == $ver
+                and ([walk_keys] | unique - allowlist | length) == 0
+                and (keys_unsorted | sort) == (["$schema","runs","version"] | sort)
+                and all(.runs[]?;
+                    (keys_unsorted | sort) == (["invocations","results","tool"] | sort)
+                    and (.tool | keys_unsorted == ["driver"])
+                    and (.tool.driver | (keys_unsorted - ["name","rules"] | length) == 0)
+                    and all(.tool.driver.rules[]?;
+                        (keys_unsorted - ["id","shortDescription"] | length) == 0
+                        and (if has("shortDescription")
+                             then (.shortDescription | keys_unsorted == ["text"])
+                             else true end))
+                    and all(.results[]?;
+                        .message.text == .ruleId
+                        and ((keys_unsorted | sort)
+                              - (["ruleId","level","message","locations"] | sort)
+                              | length) == 0
+                        and all(.locations[]?;
+                            keys_unsorted == ["physicalLocation"]
+                            and (.physicalLocation
+                                  | (keys_unsorted - ["artifactLocation","region"] | length) == 0)
+                            and (.physicalLocation.artifactLocation | keys_unsorted == ["uri"])
+                            and (if (.physicalLocation | has("region"))
+                                 then (.physicalLocation.region
+                                        | (keys_unsorted - ["startLine","endLine"] | length) == 0)
+                                 else true end)))
+                    and all(.invocations[]?; keys_unsorted == ["executionSuccessful"]))
+              ' "$sarif_file" >/dev/null \
+                || { echo "::error::SARIF keys outside allowlist or shape changed in $sarif_file; failing closed"; exit 1; }
+            fi
+          done
+          echo "Semgrep results stripped to allowlisted document fields only"
+      - name: Upload Semgrep results (JSON + SARIF, source text stripped)
+        if: ${{ always() && steps.strip.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: semgrep-results-${{ github.event_name }}-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/semgrep/results.json
             ${{ runner.temp }}/semgrep/results.sarif
+            ${{ runner.temp }}/semgrep/new/results.json
+            ${{ runner.temp }}/semgrep/new/results.sarif
           if-no-files-found: ignore
           retention-days: 14
 
