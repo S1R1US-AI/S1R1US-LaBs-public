@@ -1,7 +1,6 @@
 /** Tiny GM B0aRd avatars. Server-only. No remote URLs. No SVG (XSS). */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { deskStoreFiles, parentDir } from "./data-path.ts";
+import { deskStoreFiles, readDeskFile, writeDeskFile } from "./data-path.ts";
 
 const PATHS = deskStoreFiles("gm-board-pics.json");
 const MAX_BYTES = 10_240;
@@ -15,7 +14,7 @@ function load(): Store {
   if (typeof window !== "undefined") return {};
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const raw = JSON.parse(readDeskFile(p)) as Store;
       if (raw && typeof raw === "object") return raw;
     } catch {
       /* missing */
@@ -29,8 +28,7 @@ function save(s: Store) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

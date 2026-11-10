@@ -7,13 +7,14 @@
  * receive address. Missing / blank rows run on the S1R1US.ai defaults.
  * Never stores keys. Never talks to Coinbase.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dataPaths, deskStoreFiles, parentDir } from "./data-path.ts";
+import { dataPaths, deskStoreFiles, readDeskFile, writeDeskFile } from "./data-path.ts";
 import {
   ckpoolStatsUrl,
   ckpoolUserJsonUrl,
   defaultMinerConfig,
   minerActive,
+  minerAddressError,
+  MINERS_DEFAULT_ADDRESS,
   parseCkpoolHash,
   withMinerDefaults,
   type MinerConfig,
@@ -44,7 +45,7 @@ const STATS_TTL_MS = 60_000;
 function readJson<T>(paths: string[]): T | null {
   for (const p of paths) {
     try {
-      return JSON.parse(readFileSync(p, "utf8")) as T;
+      return JSON.parse(readDeskFile(p)) as T;
     } catch {
       /* missing */
     }
@@ -56,8 +57,7 @@ function writeJson(paths: string[], value: unknown) {
   const body = JSON.stringify(value);
   for (const p of paths) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* read-only path */
     }
@@ -67,7 +67,11 @@ function writeJson(paths: string[], value: unknown) {
 /** Load the saved config for a scope — S1R1US.ai defaults fill every blank box. */
 export function loadMinerConfig(scope: MinerScope): MinerConfig {
   const store = readJson<ConfigStore>(CONFIG_PATHS) ?? {};
-  return withMinerDefaults(store[scope]);
+  const cfg = withMinerDefaults(store[scope]);
+  if (minerAddressError(cfg.address) != null) {
+    return { ...cfg, address: MINERS_DEFAULT_ADDRESS };
+  }
+  return cfg;
 }
 
 /**

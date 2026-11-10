@@ -402,15 +402,19 @@ test("browser-smoke wires the guard and verdict helpers", () => {
 
 test("browser-smoke file I/O only touches guarded paths", () => {
   const src = readFileSync(join(TEMPLATE_ROOT, "scripts/browser-smoke.mjs"), "utf8");
-  assert.doesNotMatch(src, /(?:writeFileSync|readFileSync|statSync|realpathSync)\(\s*["'`]/);
+  assert.doesNotMatch(src, /(?:writeFileSync|readFileSync|statSync|realpathSync|openSync|fstatSync)\(\s*["'`]/);
   const writes = [...src.matchAll(/writeFileSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
   assert.equal(writes.length, 2);
   assert.ok(
     writes.every((v) => v === "outJson"),
     `unexpected writeFileSync target: ${writes}`,
   );
+  const opens = [...src.matchAll(/openSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
+  assert.deepEqual(opens, ["baselinePath"]);
+  const fstats = [...src.matchAll(/fstatSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
+  assert.deepEqual(fstats, ["fd"]);
   const reads = [...src.matchAll(/readFileSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
-  assert.deepEqual(reads, ["baselinePath"]);
-  const stats = [...src.matchAll(/statSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
-  assert.deepEqual(stats, ["baselinePath"]);
+  assert.deepEqual(reads, ["fd"]);
+  const stats = [...src.matchAll(/(?<![A-Za-z])statSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
+  assert.deepEqual(stats, []);
 });
