@@ -56,7 +56,7 @@ function fail(msg: string): never {
 
 function plantAll(dir: string) {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  for (const [name, body] of Object.entries(PLANTED)) writeFileSync(join(dir, name), JSON.stringify(body));
+  for (const [name, body] of Object.entries(PLANTED)) writeFileSync(join(dir, name), JSON.stringify(body), { mode: 0o600 });
 }
 
 async function loaders() {
@@ -106,10 +106,10 @@ async function scenarioDurable(tmp: string) {
   writeDeskFile(join(durable, GATE), JSON.stringify(goodGate));
   writeDeskFile(join(durable, PANEL), JSON.stringify(goodPanel));
   // Old-style planted copies directly in the temp folder.
-  writeFileSync(join(tmp, ADMIN), JSON.stringify(badAdmin));
-  writeFileSync(join(tmp, GATE), JSON.stringify(badGate));
+  writeFileSync(join(tmp, ADMIN), JSON.stringify(badAdmin), { mode: 0o600 });
+  writeFileSync(join(tmp, GATE), JSON.stringify(badGate), { mode: 0o600 });
   const hostilePanel = join(tmp, "hostile-panel-lock.json");
-  writeFileSync(hostilePanel, JSON.stringify(badPanel));
+  writeFileSync(hostilePanel, JSON.stringify(badPanel), { mode: 0o600 });
   symlinkSync(hostilePanel, join(tmp, PANEL));
 
   const l = await loaders();
@@ -127,7 +127,7 @@ async function scenarioDurable(tmp: string) {
   const refuseDir = mkdtempSync(join(tmp, "desk-refuse-"));
   const real = join(refuseDir, "real.json");
   const dest = join(refuseDir, "dest.json");
-  writeFileSync(real, "keep");
+  writeFileSync(real, "keep", { mode: 0o600 });
   symlinkSync(real, dest);
   let threw = false;
   try {

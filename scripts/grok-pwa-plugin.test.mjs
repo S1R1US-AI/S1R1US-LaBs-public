@@ -284,7 +284,12 @@ test("published VITE_PUBLIC_HOSTNAME wins over request Host for og:image", () =>
       otherPublicHost,
       /property="og:image" content="https:\/\/plum-plaza-reef-dream\.grok\.me\/og\.jpg"/,
     );
-    assert.ok(!otherPublicHost.includes("custom.example.com"));
+    // The request Host never reaches the page: no URL in the head uses it, and it is not any token of the HTML.
+    const requestHost = "custom.example.com";
+    const urlHosts = [...otherPublicHost.matchAll(/https?:\/\/[^\s"'<>]+/g)].map((m) => new URL(m[0]).hostname);
+    assert.ok(urlHosts.length > 0);
+    assert.ok(urlHosts.every((h) => h !== requestHost));
+    assert.ok(otherPublicHost.split(/[^A-Za-z0-9.-]+/).every((tok) => tok !== requestHost));
   } finally {
     if (prev === undefined) delete process.env.VITE_PUBLIC_HOSTNAME;
     else process.env.VITE_PUBLIC_HOSTNAME = prev;

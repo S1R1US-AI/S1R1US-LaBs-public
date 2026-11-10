@@ -744,11 +744,13 @@ export function canonicalRedirect(req, target) {
  * log lines or send terminal control sequences.
  */
 export function logSafe(value) {
-  return String(value ?? "").replace(/[\s\S]/g, (ch) => {
-    const code = ch.charCodeAt(0);
-    if (code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f) || code === 0x2028 || code === 0x2029) return "";
-    return ch;
-  });
+  return String(value ?? "")
+    .replace(/[\r\n]/g, "")
+    .replace(/[\s\S]/g, (ch) => {
+      const code = ch.charCodeAt(0);
+      if (code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f) || code === 0x2028 || code === 0x2029) return "";
+      return ch;
+    });
 }
 
 /** Data replies under /api/ are for programs, not search results: ask crawlers not to index them. */

@@ -1,6 +1,20 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  closeSync,
+  constants as fsConstants,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -143,10 +157,16 @@ describe("private state directory and atomic writes", () => {
     scratch.push(dir);
     const target = join(dir, "row.json");
     writeDeskFile(target, '{"ok":true}');
-    const st = lstatSync(target);
-    assert.equal(st.isSymbolicLink(), false);
-    assert.equal(st.mode & 0o777, 0o600);
-    assert.equal(readFileSync(target, "utf8"), '{"ok":true}');
+    // One no-follow handle: a symlink fails to open, and mode and body come from the same file.
+    const fd = openSync(target, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    try {
+      const st = fstatSync(fd);
+      assert.equal(st.isFile(), true);
+      assert.equal(st.mode & 0o777, 0o600);
+      assert.equal(readFileSync(fd, "utf8"), '{"ok":true}');
+    } finally {
+      closeSync(fd);
+    }
     assert.deepEqual(
       readdirSync(dir).filter((n: string) => n.endsWith(".tmp")),
       [],
@@ -158,7 +178,7 @@ describe("private state directory and atomic writes", () => {
     scratch.push(dir);
     const real = join(dir, "real.json");
     const target = join(dir, "row.json");
-    writeFileSync(real, "secret");
+    writeFileSync(real, "secret", { mode: 0o600 });
     symlinkSync(real, target);
     assert.throws(() => writeDeskFile(target, "hostile"), /symlink/);
     assert.equal(readFileSync(real, "utf8"), "secret");
@@ -175,7 +195,7 @@ describe("desk file reader", () => {
   it("reads a regular file and refuses a symlinked file or a non-file", () => {
     const dir = mkdtempSync(join(tmpdir(), "desk-read-"));
     scratch.push(dir);
-    writeFileSync(join(dir, "real.json"), '{"ok":1}');
+    writeFileSync(join(dir, "real.json"), '{"ok":1}', { mode: 0o600 });
     symlinkSync(join(dir, "real.json"), join(dir, "link.json"));
     mkdirSync(join(dir, "sub.json"));
     assert.equal(readDeskFile(join(dir, "real.json")), '{"ok":1}');
@@ -194,10 +214,14 @@ describe("desk file reader", () => {
 
     mkdirSync(deskStateDir(), { mode: 0o700 });
     chmodSync(deskStateDir(), 0o777);
-    writeFileSync(deskStateFile("app-admins.json"), '{"rows":[]}');
+    writeFileSync(deskStateFile("app-admins.json"), '{"rows":[]}', { mode: 0o600 });
     assert.equal(deskStateDirIsSafe(), false, "0777 folder is not safe");
     assert.throws(() => readDeskFile(deskStateFile("app-admins.json")), /safety check/);
     assert.equal(lstatSync(deskStateDir()).mode & 0o777, 0o777, "reader must not chmod the folder");
+
+    assert.throws(() => ensureDeskStateDir(), /wrong mode/, "writer must not repair an open folder");
+    assert.throws(() => writeDeskFile(deskStateFile("app-admins.json"), '{"rows":[1]}'), /wrong mode/);
+    assert.equal(lstatSync(deskStateDir()).mode & 0o777, 0o777, "writer must not chmod an open folder");
 
     chmodSync(deskStateDir(), 0o700);
     assert.equal(deskStateDirIsSafe(), true);
@@ -208,7 +232,7 @@ describe("desk file reader", () => {
     const real = mkdtempSync(join(tmpdir(), "desk-real-state-"));
     scratch.push(real);
     chmodSync(real, 0o700);
-    writeFileSync(join(real, "agent-gate.json"), "{}");
+    writeFileSync(join(real, "agent-gate.json"), "{}", { mode: 0o600 });
     symlinkSync(real, deskStateDir());
     assert.equal(deskStateDirIsSafe(), false);
     assert.throws(() => readDeskFile(deskStateFile("agent-gate.json")), /safety check/);
@@ -230,6 +254,8 @@ describe("planted temp files do not override desk state", () => {
       TMPDIR: tmp,
     };
     delete env.DESK_TEST_DATA_DIR;
+    // Run as production does: without the node test-runner flag, test-only fixed temp paths stay off.
+    delete env.NODE_TEST_CONTEXT;
     delete env[dataDirSetting];
     if (durable) env[dataDirSetting] = join(tmp, "durable");
     try {
@@ -241,7 +267,7 @@ describe("planted temp files do not override desk state", () => {
       if (res.status !== 0) {
         assert.fail(res.stderr || res.stdout || `hostile child (${scenario}) exited ${res.status}`);
       }
-      assert.match(res.stdout, new RegExp(`HOSTILE_TEST_OK ${scenario}`));
+      assert.ok(res.stdout.includes(`HOSTILE_TEST_OK ${scenario}\n`), `hostile child (${scenario}) did not report OK`);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

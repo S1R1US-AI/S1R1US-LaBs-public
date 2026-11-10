@@ -101,7 +101,7 @@ export function deskStateFile(name: string): string {
 
 /**
  * Create or reuse the private state directory. Refuses a symlink, a non-directory,
- * a folder owned by anyone else, or a mode other than 0700.
+ * a folder owned by anyone else, or a folder with any group or other access.
  */
 export function ensureDeskStateDir(): string {
   const dir = deskStateDir();
@@ -125,7 +125,12 @@ export function ensureDeskStateDir(): string {
   if (uid !== undefined && st.uid !== uid) {
     throw new Error("desk state folder has the wrong owner");
   }
+  if ((st.mode & 0o077) !== 0) {
+    // Group or other access means files may already have been planted: refuse, never repair.
+    throw new Error("desk state folder has the wrong mode");
+  }
   if ((st.mode & 0o777) !== 0o700) {
+    // Only owner bits are missing (for example a strict umask): restore 0700.
     chmodSync(dir, 0o700);
     st = lstatSync(dir);
     if (st.isSymbolicLink() || !st.isDirectory() || (st.mode & 0o777) !== 0o700) {
@@ -250,7 +255,8 @@ export function readDeskFile(path: string): string {
   if (!path || path.includes("\0")) throw new Error("invalid desk file path");
   const stateCopy = inDeskStateDir(path);
   if (stateCopy && !deskStateDirIsSafe()) throw new Error("desk state folder failed its safety check");
-  const fd = openSync(path, READ_FLAGS);
+  // Read-only open; the 0600 mode would only apply if a file were ever created here.
+  const fd = openSync(path, READ_FLAGS, 0o600);
   try {
     const st = fstatSync(fd);
     if (!st.isFile()) throw new Error("desk file is not a regular file");

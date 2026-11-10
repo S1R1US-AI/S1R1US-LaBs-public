@@ -149,8 +149,9 @@ describe("7-B0T H3DGE FUND WHITE LABEL", () => {
       OSS_LICENSE_NOTICE,
       /Copyright, public-source terms, and OSS license obligations must be reviewed and enforced before quoting, copying, or integrating material\./,
     );
-    const prompt = builderPrompt(goodConfig());
-    assert.ok(prompt.includes("example-fund.com"));
+    const cfg = goodConfig();
+    const prompt = builderPrompt(cfg);
+    assert.ok(prompt.includes(`system under my own domain ${cfg.domain}.`));
     assert.match(prompt, /OSS license obligations/);
     assert.doesNotMatch(prompt, /better_auth_secret_name/);
   });
