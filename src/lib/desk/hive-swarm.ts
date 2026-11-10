@@ -1,12 +1,11 @@
 /** H1V3 SW@RM — combined BYO compute paper hive. Never escrow. Never Coinbase create. */
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { inspectAgentInput } from "./agent-security.ts";
 import { stampGoLiveNotice } from "./go-live-notices.ts";
 import { GO_LIVE_DEADLINE_LABEL } from "./go-live.ts";
 import { HIVE_AGENT_WELCOME, hiveResourcePublic } from "./hive-resource.ts";
-import { dataPaths, deskStoreFiles, parentDir } from "./data-path.ts";
+import { dataPaths, deskStoreFiles, readDeskFile, writeDeskFile } from "./data-path.ts";
 
 
 export const HIVE_PATH = "/h1v3";
@@ -78,7 +77,7 @@ function boardIdent(token: string) {
   const h = createHash("sha256").update(tok).digest("hex");
   for (const p of deskStoreFiles("gm-board.json")) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as {
+      const raw = JSON.parse(readDeskFile(p)) as {
         agents?: Array<{
           id: string;
           name: string;
@@ -114,7 +113,7 @@ function hiveBarred(name: string, ip?: string) {
   const loop = !ip || ip === "127.0.0.1" || ip === "::1" || ip === "local";
   for (const p of deskStoreFiles("agent-bars.json")) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as { rows?: Array<{ name?: string; ip?: string }> };
+      const raw = JSON.parse(readDeskFile(p)) as { rows?: Array<{ name?: string; ip?: string }> };
       if ((raw.rows ?? []).some((r) => r.name === k || (!loop && ip && r.ip === ip))) return true;
     } catch {
       /* missing */
@@ -181,7 +180,7 @@ function load(): Store {
   if (typeof window !== "undefined") return empty();
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const raw = JSON.parse(readDeskFile(p)) as Store;
       if (raw && Array.isArray(raw.members)) {
         return {
           ...empty(),
@@ -204,8 +203,7 @@ function save(s: Store) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

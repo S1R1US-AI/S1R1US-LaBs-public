@@ -1,6 +1,5 @@
 /** Server-only LoCK3D STATUS. Never import from a client page. */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { setAgentComm, isAgentCommOpen } from "./agent-gate.ts";
 import { stampGoLiveNotice } from "./go-live-notices.ts";
 import { setHiveStatus, hiveAdmin } from "./hive-swarm.ts";
@@ -18,7 +17,7 @@ import {
   type TapeStatus,
 } from "./lock-status.ts";
 import { lastGoodMeta } from "./tape-persist.ts";
-import { deskDataFile, deskStoreFiles, parentDir, requireDataFile } from "./data-path.ts";
+import { deskDataFile, deskStoreFiles, readDeskFile, requireDataFile, writeDeskFile } from "./data-path.ts";
 
 const PATHS = deskStoreFiles("lock-status.json");
 const GM_LIVE = deskDataFile("gm-live.json");
@@ -33,7 +32,7 @@ function readDisk(): LockStore | null {
   if (typeof window !== "undefined") return null;
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as Partial<LockStore>;
+      const raw = JSON.parse(readDeskFile(p)) as Partial<LockStore>;
       if (!raw || typeof raw !== "object") continue;
       return {
         mode: raw.mode === "LIVE" ? "LIVE" : "SIM",
@@ -66,8 +65,7 @@ function save(s: LockStore) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }
@@ -76,7 +74,7 @@ function save(s: LockStore) {
 
 function readGmLive(): boolean {
   try {
-    const j = JSON.parse(readFileSync(requireDataFile(GM_LIVE), "utf8")) as { liveUnlocked?: boolean };
+    const j = JSON.parse(readDeskFile(requireDataFile(GM_LIVE))) as { liveUnlocked?: boolean };
     return Boolean(j.liveUnlocked);
   } catch {
     return false;
@@ -86,8 +84,7 @@ function readGmLive(): boolean {
 function writeGmLive(on: boolean) {
   try {
     const file = requireDataFile(GM_LIVE);
-    mkdirSync(parentDir(file), { recursive: true });
-    writeFileSync(file, JSON.stringify({ liveUnlocked: on, at: new Date().toISOString() }, null, 2) + "\n");
+    writeDeskFile(file, JSON.stringify({ liveUnlocked: on, at: new Date().toISOString() }, null, 2) + "\n");
   } catch {
     /* preview */
   }

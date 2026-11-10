@@ -1,9 +1,9 @@
 /** Admin hardware-key gate (server-only). */
-import { mkdirSync, writeFileSync } from "node:fs";
+
 import { getSql } from "@/lib/db";
 import { webauthnCount } from "./webauthn.server";
 import { yubiRows } from "./yubi.server";
-import { deskStoreFiles, parentDir } from "./data-path.ts";
+import { deskStoreFiles, writeDeskFile } from "./data-path.ts";
 
 const PATHS = deskStoreFiles("admin-yubi-gate.json");
 
@@ -13,8 +13,7 @@ function writeFileGate(g: Gate) {
   const body = JSON.stringify(g);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

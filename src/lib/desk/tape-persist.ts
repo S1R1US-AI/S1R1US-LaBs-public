@@ -12,12 +12,12 @@
  * While paused the desk serves the last validated snapshot. Resume restores
  * the 5-minute pull clock. One process, one flag — Console and Security share it.
  */
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, unlinkSync } from "node:fs";
 import type { DeskSnapshot } from "./types";
-import { dataPath, deskStorePaths, parentDir } from "./data-path.ts";
+import { deskFileReadable, deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 
-const LAST_PATH = dataPath("/tmp/desk-last-good.json");
-const FREEZE_FLAG = dataPath("/tmp/desk-tape-freeze");
+const LAST_PATHS = deskStorePaths("desk-last-good.json");
+const FREEZE_PATHS = deskStorePaths("desk-tape-freeze");
 const STATE_PATHS = deskStorePaths("desk-pull-pause.json");
 
 type LastGood = { at: number; snap: DeskSnapshot };
@@ -46,7 +46,7 @@ function readPauseDisk(): PullPauseState | null {
   if (typeof window !== "undefined") return null;
   for (const p of STATE_PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as PullPauseState;
+      const raw = JSON.parse(readDeskFile(p)) as PullPauseState;
       if (typeof raw?.paused === "boolean") {
         return {
           paused: raw.paused,
@@ -58,10 +58,12 @@ function readPauseDisk(): PullPauseState | null {
       /* missing */
     }
   }
-  try {
-    if (existsSync(FREEZE_FLAG)) return { paused: true, pausedAt: null, resumedAt: null };
-  } catch {
-    /* preview */
+  for (const p of FREEZE_PATHS) {
+    try {
+      if (deskFileReadable(p)) return { paused: true, pausedAt: null, resumedAt: null };
+    } catch {
+      /* missing */
+    }
   }
   return null;
 }
@@ -71,17 +73,18 @@ function writePauseDisk(s: PullPauseState) {
   const body = JSON.stringify(s);
   for (const p of STATE_PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }
   }
-  try {
-    if (s.paused) writeFileSync(FREEZE_FLAG, "1");
-    else if (existsSync(FREEZE_FLAG)) unlinkSync(FREEZE_FLAG);
-  } catch {
-    /* preview */
+  for (const p of FREEZE_PATHS) {
+    try {
+      if (s.paused) writeDeskFile(p, "1");
+      else if (existsSync(p) && !lstatSync(p).isSymbolicLink()) unlinkSync(p);
+    } catch {
+      /* preview */
+    }
   }
 }
 
@@ -107,15 +110,16 @@ export function setTapeFrozen(on: boolean): boolean {
 export function readLastGood(): LastGood | null {
   if (typeof window !== "undefined") return null;
   if (mem) return mem;
-  try {
-    if (!existsSync(LAST_PATH)) return null;
-    const raw = JSON.parse(readFileSync(LAST_PATH, "utf8")) as LastGood;
-    if (raw?.snap?.btc) {
-      mem = raw;
-      return raw;
+  for (const p of LAST_PATHS) {
+    try {
+      const raw = JSON.parse(readDeskFile(p)) as LastGood;
+      if (raw?.snap?.btc) {
+        mem = raw;
+        return raw;
+      }
+    } catch {
+      /* corrupt or missing */
     }
-  } catch {
-    /* corrupt */
   }
   return null;
 }
@@ -141,10 +145,13 @@ export function writeLastGood(snap: DeskSnapshot) {
       }
     : snap;
   mem = { at: Date.now(), snap: keep };
-  try {
-    writeFileSync(LAST_PATH, JSON.stringify(mem));
-  } catch {
-    /* preview */
+  const body = JSON.stringify(mem);
+  for (const p of LAST_PATHS) {
+    try {
+      writeDeskFile(p, body);
+    } catch {
+      /* preview */
+    }
   }
 }
 
