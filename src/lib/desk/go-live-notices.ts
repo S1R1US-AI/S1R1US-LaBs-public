@@ -1,7 +1,6 @@
 /** Pull-based go-live notices for registered AI agents. Server-only. No webhooks. */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { deskStorePaths, parentDir } from "./data-path.ts";
+import { deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 
 export type GoLiveNoticeKind =
   | "MAINTENANCE"
@@ -37,7 +36,7 @@ function load(): Store {
   if (typeof window !== "undefined") return { notices: [] };
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const raw = JSON.parse(readDeskFile(p)) as Store;
       if (Array.isArray(raw?.notices)) return { notices: raw.notices.slice(0, MAX) };
     } catch {
       /* missing */
@@ -51,8 +50,7 @@ function save(s: Store) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

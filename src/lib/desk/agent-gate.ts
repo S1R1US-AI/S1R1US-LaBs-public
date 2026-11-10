@@ -1,9 +1,8 @@
 /** Server-only. Admin can close external AI communication. Never import from a client page. */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { stampInvites } from "./agent-waitlist";
 import { stampGoLiveNotice } from "./go-live-notices";
-import { deskStorePaths, parentDir } from "./data-path.ts";
+import { deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 
 export type AgentInviteStatus = "NONE" | "PENDING" | "SENT";
 export type AgentCommStatus = "OPEN" | "MAINTENANCE";
@@ -57,7 +56,7 @@ function readDisk(): AgentGateState | null {
   if (typeof window !== "undefined") return null;
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as AgentGateState;
+      const raw = JSON.parse(readDeskFile(p)) as AgentGateState;
       if (typeof raw?.externalAgents === "boolean") {
         return {
           externalAgents: raw.externalAgents,
@@ -91,8 +90,7 @@ function save(s: AgentGateState) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview / serverless */
     }

@@ -7,7 +7,7 @@
  * The data folder comes from the host's data-folder env setting (none when unset).
  * The watched list is every "/tmp/..." path named in src/, server/ and scripts/,
  * every saved desk file named through deskStoreFiles / deskStorePaths /
- * deskDataFile / deskDataPath (its /tmp copy and its copy in the data folder),
+ * deskDataFile / deskDataPath (its private state copy and its copy in the data folder),
  * plus every file and folder at the top of the data folder. Files are compared by content hash, folders by the hashes of
  * everything inside them, and links by their target as well as what they point to.
  * Other programs on the same machine can change these files too, so run the
@@ -25,6 +25,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,6 +33,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCAN_DIRS = ["src", "server", "scripts"];
 const SCAN_EXT = /\.(ts|tsx|mjs|js|cjs|py)$/;
 const PATH_RE = /\/tmp\/[A-Za-z0-9._-]+/g;
+const STATE_DIR_NAME = "s1r1us-desk-state";
 const storeCallRe = /\bdesk(Store(?:Files|Paths)|Data(?:File|Path))\(\s*"([A-Za-z0-9._-]+)"/g;
 /** Absolute data folder from the env setting, or null (no built-in folder). */
 export function guardDataDir(raw) {
@@ -70,7 +72,7 @@ export function sharedPathsFromSource(root = ROOT, dataDir = DATA_DIR) {
       const src = readFileSync(f, "utf8");
       for (const m of src.matchAll(PATH_RE)) found.add(m[0]);
       for (const m of src.matchAll(storeCallRe)) {
-        if (m[1].startsWith("Store")) found.add(`/tmp/${m[2]}`);
+        if (m[1].startsWith("Store")) found.add(path.join(tmpdir(), STATE_DIR_NAME, m[2]));
         if (dataDir) found.add(path.join(dataDir, m[2]));
       }
     }

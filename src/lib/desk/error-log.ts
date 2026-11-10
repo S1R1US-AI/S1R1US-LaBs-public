@@ -1,4 +1,4 @@
-import { dataPath } from "./data-path.ts";
+import { dataPath, deskStateFile, writeDeskFile } from "./data-path.ts";
 
 export type DeskError = {
   id: string;
@@ -12,7 +12,8 @@ export type DeskError = {
 
 const MAX = 100;
 const RING: DeskError[] = [];
-const LOG_PATH = dataPath("/tmp/desk-errors.json");
+export const DESK_ERRORS_FILE = "desk-errors.json";
+const logPath = () => dataPath(deskStateFile(DESK_ERRORS_FILE));
 
 function hostOf(msg: string) {
   const m = msg.match(/([a-z0-9.-]+\.[a-z]{2,})/i);
@@ -101,15 +102,11 @@ export function classifyFail(msg: string): { resolved: boolean; attention: boole
 
 function persist() {
   if (typeof window !== "undefined") return;
-  void import("node:fs")
-    .then((fs) => {
-      try {
-        fs.writeFileSync(LOG_PATH, JSON.stringify({ at: new Date().toISOString(), rows: RING }, null, 2));
-      } catch {
-        /* preview */
-      }
-    })
-    .catch(() => undefined);
+  try {
+    writeDeskFile(logPath(), JSON.stringify({ at: new Date().toISOString(), rows: RING }, null, 2));
+  } catch {
+    /* preview */
+  }
 }
 
 export function recordDeskFails(fails: string[], at = new Date().toISOString()) {

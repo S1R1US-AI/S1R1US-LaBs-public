@@ -159,7 +159,8 @@ test("Only enrolled YubiKey public IDs are checked, before any YubiCloud call", 
 test("YubiCloud is called only at api.yubico.com (api2-api5 retired 2020-07-01)", () => {
   assert.equal(YUBICLOUD_VERIFY_URL, "https://api.yubico.com/wsapi/2.0/verify");
   const src = readFileSync(new URL("./yubi.server.ts", import.meta.url), "utf8");
-  assert.ok(!/api[2-9]\.yubico\.com/.test(src), "no retired hosts");
+  const retired = ["api2", "api3", "api4", "api5", "api6", "api7", "api8", "api9"].some((h) => src.includes(h + ".yubico.com"));
+  assert.ok(!retired, "no retired hosts");
   assert.ok(!/wsapi\/2\.0\/verify/.test(src), "URL comes only from yubi-config");
   assert.ok(/guardedFetch\(`\$\{YUBICLOUD_VERIFY_URL\}\?/.test(src), "one fetch to the one verify URL");
   assert.equal((src.match(/guardedFetch\(/g) ?? []).length, 1);

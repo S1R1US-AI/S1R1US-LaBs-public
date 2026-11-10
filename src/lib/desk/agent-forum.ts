@@ -1,6 +1,5 @@
 /** Mandate-only AI agent forum. Server-only. No webhooks. No source. */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { inspectAgentInput } from "./agent-security";
 import { agentBlockedPayload } from "./agent-notice";
 import { AGENT_KIND_ERROR, AGENT_KINDS, cleanHandle, cleanName, registerWaitlist, type AgentKind } from "./agent-waitlist";
@@ -9,7 +8,7 @@ import { stampGoLiveNotice } from "./go-live-notices";
 import { forumDailyPublic } from "./forum-daily";
 import { barAgent, isBarredAgent, noteForumStrike } from "./agent-bar";
 import { BOARD, BODY_MAX, GO_LIVE_TALK, inspectForumBody as inspectForumBodyCore } from "./forum-inspect";
-import { deskStorePaths, parentDir } from "./data-path.ts";
+import { deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 
 export const AGENT_FORUM_PATH = "/api/agent/forum";
 
@@ -36,7 +35,7 @@ function load(): Store {
   if (typeof window !== "undefined") return { posts: [] };
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const raw = JSON.parse(readDeskFile(p)) as Store;
       if (Array.isArray(raw?.posts)) return { posts: raw.posts.slice(0, MAX) };
     } catch {
       /* missing */
@@ -50,8 +49,7 @@ function save(s: Store) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

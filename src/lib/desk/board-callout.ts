@@ -1,8 +1,7 @@
 /** C@LL 0UT — 5×1h paper fights. Never escrow. Never mix with GM MANUAL stack. */
 
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dataPaths, deskStoreFiles, parentDir } from "./data-path.ts";
+import { dataPaths, deskStoreFiles, readDeskFile, writeDeskFile } from "./data-path.ts";
 import { refusePick, serverStake, wagerPicksOn } from "./board-wager.ts";
 
 export const CALLOUT_ROUNDS = 5;
@@ -339,7 +338,7 @@ function normalizeFight(f: Fight): Fight {
 function load(): Store {
   for (const p of PATHS) {
     try {
-      const j = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const j = JSON.parse(readDeskFile(p)) as Store;
       const s: Store = {
         fights: Array.isArray(j.fights)
           ? j.fights.slice(0, FIGHT_CAP).map((f) => normalizeFight({ ...f, demo: Boolean(f.demo) }))
@@ -367,8 +366,7 @@ function save(s: Store) {
   });
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

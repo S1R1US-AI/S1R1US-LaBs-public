@@ -1,5 +1,5 @@
 /** Server-only ping log. Never import this module from a client page. */
-import { deskStoreFiles, parentDir } from "./data-path.ts";
+import { deskStoreFiles, readDeskFile, writeDeskFile } from "./data-path.ts";
 
 type Fs = {
   writeFileSync: (p: string, b: string) => void;
@@ -67,7 +67,7 @@ function load(): Store {
   if (!fs) return empty(today);
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(fs.readFileSync(p, "utf8")) as Store;
+      const raw = JSON.parse(readDeskFile(p)) as Store;
       if (raw?.dayEt === today) return raw;
     } catch {
       /* missing */
@@ -82,8 +82,7 @@ function save(s: Store) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      fs.mkdirSync(parentDir(p), { recursive: true });
-      fs.writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview / serverless */
     }

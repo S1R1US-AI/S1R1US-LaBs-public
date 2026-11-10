@@ -1,10 +1,10 @@
-import { dataPath } from "./data-path.ts";
+import { dataPath, deskStateFile, writeDeskFile } from "./data-path.ts";
 import { DATA_FEEDS } from "./policy";
 import type { DeskSnapshot, FeedAudit, FeedAuditRow } from "./types";
 
 const RING: FeedAudit[] = [];
 const RING_MAX = 12;
-const LOG_PATH = dataPath("/tmp/desk-feed-audit.json");
+const logPath = () => dataPath(deskStateFile("desk-feed-audit.json"));
 
 function row(id: string, ok: boolean, detail: string): FeedAuditRow {
   return { id, ok, detail };
@@ -83,17 +83,11 @@ export function scoreFeeds(snap: DeskSnapshot): FeedAudit {
   RING.unshift(audit);
   if (RING.length > RING_MAX) RING.length = RING_MAX;
   if (typeof window === "undefined") {
-    void import("node:fs")
-      .then((fs) => {
-        try {
-          fs.writeFileSync(LOG_PATH, JSON.stringify({ latest: audit, history: RING.slice(0, 8) }, null, 2));
-        } catch {
-          /* preview / Vercel may deny fs */
-        }
-      })
-      .catch(() => {
-        /* browser bundle */
-      });
+    try {
+      writeDeskFile(logPath(), JSON.stringify({ latest: audit, history: RING.slice(0, 8) }, null, 2));
+    } catch {
+      /* preview / Vercel may deny fs */
+    }
   }
   console.info(
     `[desk-feeds] ${audit.at} ${audit.pullMs}ms ok=${ok} fail=${fail}${fail ? ` · ${rows.filter((r) => !r.ok).map((r) => r.id).join(",")}` : ""}`,
