@@ -606,16 +606,16 @@ a:hover { text-decoration: underline; }
 }
 .bot-card[data-bot="dream-talk"] .role { color: rgba(212, 175, 55, 0.95); }
 
-.bot-card[data-bot="sensei-security"] { border-color: rgba(46, 196, 182, 0.35); }
-.bot-card[data-bot="sensei-security"] .logo-frame {
+.bot-card[data-bot="security-sensei"] { border-color: rgba(46, 196, 182, 0.35); }
+.bot-card[data-bot="security-sensei"] .logo-frame {
   border-color: rgba(46, 196, 182, 0.55);
   box-shadow: 0 0 0 4px rgba(46, 196, 182, 0.08), 0 0 24px rgba(46, 196, 182, 0.15);
 }
-.bot-card[data-bot="sensei-security"]:hover {
+.bot-card[data-bot="security-sensei"]:hover {
   border-color: rgba(46, 196, 182, 0.7);
   box-shadow: 0 8px 28px rgba(46, 196, 182, 0.14);
 }
-.bot-card[data-bot="sensei-security"] .role { color: rgba(46, 196, 182, 0.95); }
+.bot-card[data-bot="security-sensei"] .role { color: rgba(46, 196, 182, 0.95); }
 
 .bot-card[data-bot="sensei-bot"] { border-color: rgba(201, 162, 39, 0.4); }
 .bot-card[data-bot="sensei-bot"] .logo-frame {
