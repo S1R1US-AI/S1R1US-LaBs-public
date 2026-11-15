@@ -1,20 +1,28 @@
 name: Security scans
 
-# Free scans that run on every pull request and on every push to any branch or tag,
-# in place of CodeQL and the built-in secret scanning while CodeQL is unavailable.
-# No paid plan, login or token is used. Every job has no `if:` and no path filter,
-# so a check can never be skipped and reported as passing.
-# "Security scans (all passed)" fails unless every scan job finished with success.
-# Nothing here retries on its own. A failed run needs a person to look at it.
+# Rebuilt 15 Nov 2026 for plan v2. Replaces required-scans.yml and codeql.yml.
+# Coverage is the previous scanners, plus OSV blocking on high/critical-with-a-fix,
+# CodeQL (javascript-typescript, actions, python, security-extended), actionlint,
+# zizmor, and actions.lock verify. GitHub secret scanning stays a repo setting.
+# Every job has no path filter and no skip `if:` on the job itself, so a check
+# cannot be skipped and reported as passing.
+# "Security scans (all passed)" fails unless every needed job ended with success
+# (failed, skipped or cancelled all count as not passing).
+# Nothing here retries on its own. A hung or failed scan is reported to the owner
+# (SCAN-HANG-01) and is never skipped or removed to go green.
+# Pushes, schedules and manual runs are never cancelled mid-flight. Pull request
+# runs cancel only older runs of the same PR when a newer commit is pushed.
 
 on:
   pull_request:
   push:
     branches: ['**']
     tags: ['**']
-  # Daily and manual (Run workflow) full scans: full-history gitleaks (blocking) + whole-tree Semgrep report
-  # with a blocking check for findings new in the last 48 hours of the branch (no before-commit, so the
-  # base pick returns full history). Replaces the old main-only leak-scan.yml (02 B6).
+  # Daily and manual full scans: full-history gitleaks (blocking) + whole-tree
+  # Semgrep report with a blocking check for findings new in the last 48 hours
+  # (no before-commit, so the base pick returns full history). CodeQL and the
+  # other jobs also run on this schedule (daily is more often than the old
+  # weekly CodeQL cron, and does not double-run on Mondays).
   schedule:
     - cron: '23 9 * * *'
   workflow_dispatch:
@@ -22,8 +30,9 @@ on:
 permissions: {}
 
 concurrency:
-  # Pull requests: one run per PR, newer pushes cancel older. Pushes: one run per ref + commit, never cancelled.
-  group: required-scans-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  # Pull requests: one run per PR, newer pushes cancel older. Pushes, schedules
+  # and manual runs: one run per ref + commit (and event), never cancelled.
+  group: scans-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -34,7 +43,11 @@ jobs:
     permissions:
       contents: read  # check out the code
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Harden runner (audit)
+        uses: step-security/harden-runner@v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -148,7 +161,11 @@ jobs:
     permissions:
       contents: read  # check out the code
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Harden runner (audit)
+        uses: step-security/harden-runner@v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -218,6 +235,7 @@ jobs:
           # Only findings that are new since the baseline commit count as blocking here.
           # --strict also fails the scan on warnings such as files that could not be parsed.
           # --max-target-bytes 0 scans files of any size instead of skipping large ones.
+          # --exclude public/pdf.worker.min.mjs is the only path exclude (vendored minified pdf.js worker; 02 exact-path only). The file is gitignored and built at npm prebuild time, but exclude it when present so Semgrep cannot hang on it.
           # --disable-nosem and --x-ignore-semgrepignore-files stop inline nosemgrep comments and
           # .semgrepignore files in the scanned tree from hiding a finding (the image is pinned, so the flags stay).
           out="$RUNNER_TEMP/semgrep"
@@ -230,6 +248,7 @@ jobs:
               semgrep/semgrep@sha256:451b3d875c00dac7ed5db5293e584a07de11449a409c10b3c2d2652f429630b6 \
               semgrep scan --metrics=off --disable-version-check --severity ERROR --severity WARNING --error --strict \
                 --disable-nosem --x-ignore-semgrepignore-files --max-target-bytes 0 \
+                --exclude public/pdf.worker.min.mjs \
                 --quiet --json --output /out/results.json --sarif-output /out/results.sarif \
                 "$@" \
                 --config /rules/javascript --config /rules/typescript \
@@ -468,7 +487,7 @@ jobs:
           echo "Semgrep results stripped to allowlisted document fields only"
       - name: Upload Semgrep results (JSON + SARIF, source text stripped)
         if: ${{ always() && steps.strip.outcome == 'success' }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: semgrep-results-${{ github.event_name }}-${{ github.run_id }}
           path: |
@@ -479,16 +498,22 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+
   osv:
-    # REPORT-ONLY until the known findings in this repo are fixed (02 B1). Not in all-passed, not required.
-    # Later, separate go: make a finding fail the job and add osv to all-passed needs (expected count 3).
-    name: Dependency scan (osv-scanner, report-only)
+    # Blocking only for high or critical findings that already have a fix.
+    # Everything else (medium/low/unknown, or no fix available) is report-only.
+    # Scanner errors (unreadable output, exit other than 0 or 1) fail closed.
+    name: Dependency scan (osv-scanner)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read  # check out the code
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Harden runner (audit)
+        uses: step-security/harden-runner@v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: Install osv-scanner 2.7.0 (checksum pinned, official release binary)
@@ -499,33 +524,233 @@ jobs:
           wget -q -O osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64
           echo "160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b  osv-scanner" | sha256sum -c -
           chmod +x osv-scanner
-      - name: Scan every lockfile against OSV.dev (no token; package names and versions only are sent)
+      - name: Scan every lockfile against OSV.dev and block high/critical findings that have a fix
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/osv.json"
+          mkdir -p "$RUNNER_TEMP"
           status=0
           # --recursive finds every lockfile in the tree; no in-tree osv-scanner.toml is trusted.
           "$HOME/scan-tools/osv-scanner" scan source --recursive --no-ignore --format json --output-file "$out" --config /dev/null . || status=$?
           if ! jq -e '.results' "$out" >/dev/null 2>&1; then
             echo "::error::osv-scanner did not write a readable result (exit $status); failing closed"; exit 1
           fi
-          jq -r '.results[]?.packages[]? | .package.name as $n | .package.version as $v | .groups[]? | "finding: \($n)@\($v) max_severity=\(.max_severity // "unknown") ids=\(.ids | join(","))"' "$out"
-          n="$(jq '[.results[]?.packages[]?.groups[]?] | length' "$out")"
-          echo "osv-scanner exit $status, $n vulnerable package group(s)"
-          case "$status" in
-            0) ;;
-            1) echo "::warning::$n known-vulnerable dependency group(s); report-only, not failing" ;;
-            *) echo "::error::osv-scanner could not finish (exit $status); failing closed"; exit 1 ;;
-          esac
+          python3 - "$out" "$status" <<'PY'
+          import json, sys
+
+          path, raw_status = sys.argv[1], int(sys.argv[2])
+          HIGH = 7.0
+          QUAL = {
+              "CRITICAL": 9.0,
+              "HIGH": 7.0,
+              "MODERATE": 5.0,
+              "MEDIUM": 5.0,
+              "LOW": 2.0,
+              "UNKNOWN": None,
+          }
+
+          def score_group(group, vulns):
+              raw = group.get("max_severity")
+              if raw not in (None, "", "unknown"):
+                  try:
+                      return float(raw)
+                  except ValueError:
+                      pass
+              best = None
+              for vid in group.get("ids") or []:
+                  v = vulns.get(vid) or {}
+                  label = ((v.get("database_specific") or {}).get("severity") or "").upper()
+                  if label in QUAL and QUAL[label] is not None:
+                      best = QUAL[label] if best is None else max(best, QUAL[label])
+                  for s in v.get("severity") or []:
+                      sc = s.get("score")
+                      if sc is None:
+                          continue
+                      try:
+                          best = float(sc) if best is None else max(best, float(sc))
+                          continue
+                      except (TypeError, ValueError):
+                          pass
+                      if isinstance(sc, str):
+                          # CVSS:3.x/AV:...  — no numeric score; ignore vector strings here
+                          continue
+              return best
+
+          def has_fix(group, vulns):
+              for vid in group.get("ids") or []:
+                  v = vulns.get(vid) or {}
+                  for aff in v.get("affected") or []:
+                      for rng in aff.get("ranges") or []:
+                          for ev in rng.get("events") or []:
+                              if ev.get("fixed"):
+                                  return True
+              return False
+
+          try:
+              data = json.load(open(path))
+          except Exception as e:
+              print(f"::error::osv-scanner JSON could not be parsed: {e}; failing closed")
+              sys.exit(1)
+          if not isinstance(data, dict) or "results" not in data:
+              print("::error::osv-scanner JSON missing results; failing closed")
+              sys.exit(1)
+
+          blocking, reported = [], []
+          for result in data.get("results") or []:
+              if not isinstance(result, dict):
+                  print("::error::osv-scanner results entry was not an object; failing closed")
+                  sys.exit(1)
+              for pkg in result.get("packages") or []:
+                  meta = (pkg or {}).get("package") or {}
+                  name = meta.get("name") or "?"
+                  ver = meta.get("version") or "?"
+                  vulns = {v.get("id"): v for v in (pkg.get("vulnerabilities") or []) if v.get("id")}
+                  for group in pkg.get("groups") or []:
+                      ids = group.get("ids") or []
+                      sc = score_group(group, vulns)
+                      fixed = has_fix(group, vulns)
+                      sev = "unknown" if sc is None else f"{sc:.1f}"
+                      line = f"finding: {name}@{ver} max_severity={sev} fix={'yes' if fixed else 'no'} ids={','.join(ids)}"
+                      print(line)
+                      if sc is not None and sc >= HIGH and fixed:
+                          blocking.append(line)
+                      else:
+                          reported.append(line)
+
+          print(f"osv-scanner exit {raw_status}, {len(blocking)} blocking high/critical-with-fix, {len(reported)} report-only")
+          if raw_status not in (0, 1):
+              print(f"::error::osv-scanner could not finish (exit {raw_status}); failing closed")
+              sys.exit(1)
+          if blocking:
+              print(f"::error::{len(blocking)} high/critical finding(s) with a fix available")
+              sys.exit(1)
+          if reported:
+              print(f"::warning::{len(reported)} finding(s) below high, or with no fix; report-only, not failing")
+          sys.exit(0)
+          PY
+
+  codeql:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read          # check out the code
+      security-events: write  # upload results to code scanning
+      actions: read           # read workflow run info for the upload
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions, python]
+    steps:
+      - name: Harden runner (audit)
+        uses: step-security/harden-runner@v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
+
+  actionlint:
+    name: Workflow lint (actionlint)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner (audit)
+        uses: step-security/harden-runner@v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Install actionlint 1.7.12 (checksum pinned)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/scan-tools"
+          cd "$HOME/scan-tools"
+          wget -q -O actionlint_1.7.12_linux_amd64.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          wget -q -O actionlint_1.7.12_checksums.txt https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_checksums.txt
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint_1.7.12_linux_amd64.tar.gz" | sha256sum -c -
+          grep '  actionlint_1.7.12_linux_amd64.tar.gz$' actionlint_1.7.12_checksums.txt | sha256sum -c -
+          tar -xzf actionlint_1.7.12_linux_amd64.tar.gz actionlint
+      - name: Lint GitHub Actions workflows
+        run: |
+          "$HOME/scan-tools/actionlint" -color
+
+  zizmor:
+    name: Workflow audit (zizmor)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Harden runner (audit)
+        uses: step-security/harden-runner@v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Install zizmor 1.32.0 (checksum pinned, official release asset)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/scan-tools"
+          cd "$HOME/scan-tools"
+          wget -q -O zizmor-x86_64-unknown-linux-gnu.tar.gz https://github.com/zizmorcore/zizmor/releases/download/v1.32.0/zizmor-x86_64-unknown-linux-gnu.tar.gz
+          echo "bb110cc765eca9cd7efb2e284a956be5974c60027b0970f16397d86208a9957b  zizmor-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c -
+          tar -xzf zizmor-x86_64-unknown-linux-gnu.tar.gz zizmor
+      - name: Audit workflows (regular persona, in-tree ignores disabled)
+        run: |
+          "$HOME/scan-tools/zizmor" --no-ignores --strict-collection --persona regular .
+
+  lockfile:
+    name: Actions lockfile (verify)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Harden runner (audit)
+        uses: step-security/harden-runner@v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify .github/workflows/actions.lock
+        run: |
+          set -euo pipefail
+          gh extension install github/gh-actions-lock --pin v0.4.1
+          gh actions-lock --verify
 
   all-passed:
     name: Security scans (all passed)
-    needs: [gitleaks, semgrep]
+    needs: [gitleaks, semgrep, osv, codeql, actionlint, zizmor, lockfile]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     steps:
+      - name: Harden runner (audit)
+        uses: step-security/harden-runner@v2.22.4
+        with:
+          egress-policy: audit
       - name: Fail unless every scan job succeeded (skipped, cancelled or failed all count as not passing)
         env:
           results: ${{ join(needs.*.result, ' ') }}
@@ -537,4 +762,4 @@ jobs:
             n=$((n+1))
             if [ "$r" != "success" ]; then echo "::error::a scan job ended with: $r"; exit 1; fi
           done
-          if [ "$n" -ne 2 ]; then echo "::error::expected 2 scan results, got $n"; exit 1; fi
+          if [ "$n" -ne 7 ]; then echo "::error::expected 7 scan results, got $n"; exit 1; fi

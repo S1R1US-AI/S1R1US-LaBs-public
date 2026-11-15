@@ -1,5 +1,10 @@
 name: CI
 
+# Rebuilt 15 Nov 2026 for plan v2. Same tests as before (build:do, test, lint,
+# typecheck). Top-level permissions are empty; the job is contents:read only.
+# Checkout is SHA-pinned to v7 (not v4, which warns on Node 20). Pushes are
+# never cancelled; pull request runs cancel only older runs of the same PR.
+
 on:
   pull_request:
   push:
@@ -7,31 +12,51 @@ on:
     tags: ['**']
 
 concurrency:
-  # Pull requests: one run per PR, newer pushes cancel older. Pushes: one run per ref + commit, never cancelled.
+  # Pull requests: one run per PR, newer pushes cancel older. Pushes: one run
+  # per ref + commit, never cancelled.
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   test:
     name: Test + lint + typecheck
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Harden runner (audit)
+        uses: step-security/harden-runner@v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: "22"
-          cache: npm
-      - name: Use npm 11.21.0 (matches the lockfile)
+          # No npm cache: this workflow does not publish, and a tag-triggered
+          # cache would be flagged as a cache-poisoning risk. Tests do not need it.
+          package-manager-cache: false
+      - name: Use npm 11.21.0 (checksum pinned, matches the lockfile)
         # Node 22 ships npm 10, whose `npm ci` wrongly reports the optional
         # peer lru-cache@^11 (unstorage) as missing from this npm 11 lockfile.
-        run: npm install -g npm@11.21.0
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/scan-tools"
+          cd "$HOME/scan-tools"
+          wget -q -O npm-11.21.0.tgz https://registry.npmjs.org/npm/-/npm-11.21.0.tgz
+          echo "783e7c92bf73b442fb800c2d6ef3921e86da8894a700fed45140e37916877482  npm-11.21.0.tgz" | sha256sum -c -
+          echo "7184c24ba6c6d8c1419ed1c4a187377bc05b254c  npm-11.21.0.tgz" | sha1sum -c -
+          tar -xzf npm-11.21.0.tgz
+          test -x package/bin/npm-cli.js
+          mkdir -p "$HOME/scan-tools/npm-prefix/bin"
+          ln -s "$HOME/scan-tools/package/bin/npm-cli.js" "$HOME/scan-tools/npm-prefix/bin/npm"
+          echo "$HOME/scan-tools/npm-prefix/bin" >> "$GITHUB_PATH"
+          test "$("$HOME/scan-tools/npm-prefix/bin/npm" --version)" = "11.21.0"
       - name: Install
         run: npm ci --ignore-scripts
       - name: Build output is not committed
