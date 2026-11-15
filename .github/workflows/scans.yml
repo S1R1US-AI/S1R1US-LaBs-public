@@ -44,10 +44,10 @@ jobs:
       contents: read  # check out the code
     steps:
       - name: Harden runner (audit)
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -162,10 +162,10 @@ jobs:
       contents: read  # check out the code
     steps:
       - name: Harden runner (audit)
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -487,7 +487,7 @@ jobs:
           echo "Semgrep results stripped to allowlisted document fields only"
       - name: Upload Semgrep results (JSON + SARIF, source text stripped)
         if: ${{ always() && steps.strip.outcome == 'success' }}
-        uses: actions/upload-artifact@v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: semgrep-results-${{ github.event_name }}-${{ github.run_id }}
           path: |
@@ -510,10 +510,10 @@ jobs:
       contents: read  # check out the code
     steps:
       - name: Harden runner (audit)
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install osv-scanner 2.7.0 (checksum pinned, official release binary)
@@ -536,7 +536,7 @@ jobs:
             echo "::error::osv-scanner did not write a readable result (exit $status); failing closed"; exit 1
           fi
           python3 - "$out" "$status" <<'PY'
-          import json, sys
+          import json, re, sys
 
           path, raw_status = sys.argv[1], int(sys.argv[2])
           HIGH = 7.0
@@ -576,10 +576,25 @@ jobs:
                           continue
               return best
 
-          def has_fix(group, vulns):
+          def norm_name(ecosystem, name):
+              # PyPI names compare after PEP 503 normalization; other ecosystems compare exactly.
+              name = name or ""
+              if ecosystem == "PyPI":
+                  return re.sub(r"[-_.]+", "-", name).lower()
+              return name
+
+          def has_fix(group, vulns, ecosystem, name):
+              # Count a fix only from the affected entry for the scanned package
+              # (same ecosystem and same name), not from other packages in the advisory.
+              want = norm_name(ecosystem, name)
               for vid in group.get("ids") or []:
                   v = vulns.get(vid) or {}
                   for aff in v.get("affected") or []:
+                      ap = (aff or {}).get("package") or {}
+                      if ap.get("ecosystem") != ecosystem:
+                          continue
+                      if norm_name(ecosystem, ap.get("name")) != want:
+                          continue
                       for rng in aff.get("ranges") or []:
                           for ev in rng.get("events") or []:
                               if ev.get("fixed"):
@@ -604,11 +619,12 @@ jobs:
                   meta = (pkg or {}).get("package") or {}
                   name = meta.get("name") or "?"
                   ver = meta.get("version") or "?"
+                  ecosystem = meta.get("ecosystem") or ""
                   vulns = {v.get("id"): v for v in (pkg.get("vulnerabilities") or []) if v.get("id")}
                   for group in pkg.get("groups") or []:
                       ids = group.get("ids") or []
                       sc = score_group(group, vulns)
-                      fixed = has_fix(group, vulns)
+                      fixed = has_fix(group, vulns, ecosystem, meta.get("name"))
                       sev = "unknown" if sc is None else f"{sc:.1f}"
                       line = f"finding: {name}@{ver} max_severity={sev} fix={'yes' if fixed else 'no'} ids={','.join(ids)}"
                       print(line)
@@ -643,18 +659,18 @@ jobs:
         language: [javascript-typescript, actions, python]
     steps:
       - name: Harden runner (audit)
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: github/codeql-action/init@v4.39.3
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: ${{ matrix.language }}
           build-mode: none
           queries: security-extended
-      - uses: github/codeql-action/analyze@v4.39.3
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: /language:${{ matrix.language }}
 
@@ -666,10 +682,10 @@ jobs:
       contents: read
     steps:
       - name: Harden runner (audit)
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -697,10 +713,10 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Harden runner (audit)
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -712,9 +728,11 @@ jobs:
           wget -q -O zizmor-x86_64-unknown-linux-gnu.tar.gz https://github.com/zizmorcore/zizmor/releases/download/v1.32.0/zizmor-x86_64-unknown-linux-gnu.tar.gz
           echo "bb110cc765eca9cd7efb2e284a956be5974c60027b0970f16397d86208a9957b  zizmor-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c -
           tar -xzf zizmor-x86_64-unknown-linux-gnu.tar.gz zizmor
-      - name: Audit workflows (regular persona, in-tree ignores disabled)
+      - name: Audit workflows (regular persona, in-tree config and ignores disabled)
         run: |
-          "$HOME/scan-tools/zizmor" --no-ignores --strict-collection --persona regular .
+          # --no-config stops zizmor from loading a zizmor.yml from the scanned tree, so a change
+          # cannot turn audits off through its own config file. --no-ignores drops ignore comments.
+          "$HOME/scan-tools/zizmor" --no-config --no-ignores --strict-collection --persona regular .
 
   lockfile:
     name: Actions lockfile (verify)
@@ -726,10 +744,10 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Harden runner (audit)
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -748,7 +766,7 @@ jobs:
     permissions: {}
     steps:
       - name: Harden runner (audit)
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
       - name: Fail unless every scan job succeeded (skipped, cancelled or failed all count as not passing)
