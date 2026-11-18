@@ -80,3 +80,20 @@ test("served by the front door with a slash redirect, listed in the sitemap with
   assert.ok(nav.includes('[`${origin}/btc-eth-sol/`]: "2026-11-18",'));
   assert.ok(read("front-door-static/sitemap/index.html").includes('<a href="/btc-eth-sol/"><strong>BTC vs ETH vs SOL</strong></a>'));
 });
+
+test("hero image (webp with jpg fallback) and the page's own share image, with the approved alt text", () => {
+  const alt = "BTC vs ETH vs SOL: Bitcoin, Ethereum and Solana coins linked on a trading desk with price charts.";
+  assert.ok(page.includes('<source type="image/webp" srcset="/images/btc-eth-sol/btc-vs-eth-vs-sol-hero.webp" />'));
+  assert.ok(page.includes(`<img src="/images/btc-eth-sol/btc-vs-eth-vs-sol-hero.jpg" width="1600" height="900" alt="${alt}"`));
+  const og = "https://s1r1us.ai/images/btc-eth-sol/btc-vs-eth-vs-sol-og.jpg";
+  assert.ok(page.includes(`<meta property="og:image" content="${og}" />`));
+  assert.ok(page.includes(`<meta name="twitter:image" content="${og}" />`));
+  assert.ok(page.includes(`<meta property="og:image:alt" content="${alt}" />`));
+  assert.ok(page.includes(`<meta name="twitter:image:alt" content="${alt}" />`));
+  assert.doesNotMatch(page, /sai-citizens-united-faq-og/);
+  const ld = JSON.parse(page.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+  assert.equal(ld.image.url, og);
+  for (const n of ["btc-vs-eth-vs-sol-hero.webp", "btc-vs-eth-vs-sol-hero.jpg", "btc-vs-eth-vs-sol-og.jpg"]) {
+    assert.ok(readFileSync(new URL(`../front-door-static/images/btc-eth-sol/${n}`, import.meta.url)).length > 0, n);
+  }
+});

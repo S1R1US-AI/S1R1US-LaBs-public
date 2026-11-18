@@ -52,3 +52,5 @@
 .bes-quote p { margin: 0 0 0.5rem; }
 .bes-quote footer { font-size: 0.8rem; color: var(--muted); }
 .bes-one-btc { font-size: 1.4rem; font-weight: 800; color: var(--gold); text-align: center; letter-spacing: 0.04em; }
+.bes-hero-figure { margin: 1.25rem 0 0; }
+.bes-hero-figure img { display: block; width: 100%; height: auto; border-radius: 12px; }
