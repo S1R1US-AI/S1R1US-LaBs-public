@@ -46,6 +46,65 @@ function tags(html, name) {
   return out;
 }
 
+function num(v) {
+  var n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+function closes(rows, days) {
+  if (!Array.isArray(rows) || days < 1) return [];
+  var pts = rows
+    .filter(function (r) { return Array.isArray(r) && num(r[0]) && num(r[4]); })
+    .map(function (r) { return { t: Number(r[0]), c: Number(r[4]) }; })
+    .sort(function (a, b) { return a.t - b.t; });
+  if (pts.length < 2) return [];
+  var newest = pts[pts.length - 1];
+  var need = days * 86400;
+  var slack = 86400;
+  var target = newest.t - need;
+  var start = null;
+  var i;
+  for (i = 0; i < pts.length - 1; i++) {
+    var p = pts[i];
+    var off = p.t - target;
+    if (off < -slack || off > slack) continue;
+    if (!start) {
+      start = p;
+      continue;
+    }
+    var startOff = start.t - target;
+    var closer = Math.abs(off) < Math.abs(startOff);
+    var sameAndLater = Math.abs(off) === Math.abs(startOff) && p.t > start.t;
+    if (closer || sameAndLater) start = p;
+  }
+  if (!start) return [];
+  var span = newest.t - start.t;
+  if (span < need - slack || span > need + slack) return [];
+  var out = [];
+  for (i = 0; i < pts.length; i++) {
+    if (pts[i].t >= start.t && pts[i].t <= newest.t) out.push(pts[i].c);
+  }
+  return out.length >= 2 ? out : [];
+}
+function squash(s) {
+  return s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ").replace(/\s+/g, " ").trim();
+}
+function extractFn(src, name) {
+  const begin = "function " + name + "(";
+  const start = src.indexOf(begin);
+  assert.ok(start >= 0, name + " present");
+  let i = src.indexOf("{", start);
+  let depth = 0;
+  for (; i < src.length; i++) {
+    if (src[i] === "{") depth += 1;
+    else if (src[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return src.slice(start, i + 1);
+    }
+  }
+  assert.fail("unterminated " + name);
+}
+
+
 test("one H1, title, description, canonical and schema carry BTC vs ETH vs SOL", () => {
   assert.equal((page.match(/<h1[\s>]/g) || []).length, 1);
   assert.match(page, /<h1 id="btc-eth-sol-h1">BTC vs ETH vs SOL:/);
@@ -110,9 +169,73 @@ test("client script: read-only GETs to public market data, no cookies, text only
   assert.match(js, /signal: ac\.signal/);
   assert.match(js, /REQUEST_MS/);
   assert.match(js, /days \* 86400/);
+  assert.match(js, /var slack = 86400/);
+  assert.doesNotMatch(js, /newest - need - slack/);
   assert.match(js, /ethbtc-history/);
   assert.match(js, /soleth-history/);
 });
+
+test("closes() compares the last close to the close 30 days earlier, and slack never widens a complete history", () => {
+  assert.equal(squash(extractFn(js, "num")), squash(num.toString()));
+  assert.equal(squash(extractFn(js, "closes")), squash(closes.toString()));
+  assert.match(js, /var slack = 86400/);
+  assert.doesNotMatch(js, /newest - need - slack/);
+
+  const newest = 1700000000;
+  const step = 86400;
+  const long = [];
+  let d;
+  for (d = 0; d <= 40; d++) long.push(100 + d);
+
+  function rowsFrom(values, skipDaysAgo) {
+    const out = [];
+    let i;
+    for (i = 0; i < values.length; i++) {
+      const daysAgo = values.length - 1 - i;
+      if (skipDaysAgo != null && daysAgo === skipDaysAgo) continue;
+      const t = newest - daysAgo * step;
+      const c = values[i];
+      out.push([t, c, c, c, c, 1]);
+    }
+    return out;
+  }
+
+  const full = closes(rowsFrom(long), 30);
+  assert.equal(full.length, 31);
+  assert.equal(full[0], long[long.length - 1 - 30]);
+  assert.equal(full[full.length - 1], long[long.length - 1]);
+
+  const exact = long.slice(10);
+  assert.deepEqual(closes(rowsFrom(exact), 30), exact);
+
+  const missing30 = closes(rowsFrom(long, 30), 30);
+  assert.equal(missing30[0], long[long.length - 1 - 29]);
+  assert.equal(missing30[missing30.length - 1], long[long.length - 1]);
+
+  const only31 = [];
+  for (d = 40; d >= 0; d--) {
+    if (d === 30 || d === 29) continue;
+    const t = newest - d * step;
+    const c = 200 + d;
+    only31.push([t, c, c, c, c, 1]);
+  }
+  const got31 = closes(only31, 30);
+  assert.equal(got31[0], 231);
+  assert.equal(got31[got31.length - 1], 200);
+
+  const only28 = [];
+  for (d = 28; d >= 0; d--) {
+    const t = newest - d * step;
+    const c = 50 + d;
+    only28.push([t, c, c, c, c, 1]);
+  }
+  assert.deepEqual(closes(only28, 30), []);
+  assert.deepEqual(closes(rowsFrom(long.slice(-16)), 30), []);
+  assert.deepEqual(closes([], 30), []);
+  assert.deepEqual(closes([[newest, 1, 1, 1, 10, 1]], 30), []);
+  assert.deepEqual(closes(rowsFrom(long), 0), []);
+});
+
 
 test("served by the front door with a slash redirect, listed in the sitemap with its own lastmod", () => {
   assert.ok(start.includes('"/btc-eth-sol"'));

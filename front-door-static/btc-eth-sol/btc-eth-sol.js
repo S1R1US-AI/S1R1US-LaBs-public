@@ -48,7 +48,8 @@
     return n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
   }
   /* Coinbase daily candles: [time, low, high, open, close, volume], time in unix seconds.
-     Returns closes oldest to newest only when the timestamp span covers `days`, not merely the row count. */
+     Returns closes oldest to newest for a change of `days`: last close vs the close `days`
+     earlier. One-day slack covers a missing boundary candle only; it never widens a complete history. */
   function closes(rows, days) {
     if (!Array.isArray(rows) || days < 1) return [];
     var pts = rows
@@ -56,13 +57,33 @@
       .map(function (r) { return { t: Number(r[0]), c: Number(r[4]) }; })
       .sort(function (a, b) { return a.t - b.t; });
     if (pts.length < 2) return [];
-    var newest = pts[pts.length - 1].t;
+    var newest = pts[pts.length - 1];
     var need = days * 86400;
-    var slack = 2 * 86400;
-    var window = pts.filter(function (p) { return p.t >= newest - need - slack && p.t <= newest; });
-    if (window.length < 2) return [];
-    if (newest - window[0].t < need - slack) return [];
-    return window.map(function (p) { return p.c; });
+    var slack = 86400;
+    var target = newest.t - need;
+    var start = null;
+    var i;
+    for (i = 0; i < pts.length - 1; i++) {
+      var p = pts[i];
+      var off = p.t - target;
+      if (off < -slack || off > slack) continue;
+      if (!start) {
+        start = p;
+        continue;
+      }
+      var startOff = start.t - target;
+      var closer = Math.abs(off) < Math.abs(startOff);
+      var sameAndLater = Math.abs(off) === Math.abs(startOff) && p.t > start.t;
+      if (closer || sameAndLater) start = p;
+    }
+    if (!start) return [];
+    var span = newest.t - start.t;
+    if (span < need - slack || span > need + slack) return [];
+    var out = [];
+    for (i = 0; i < pts.length; i++) {
+      if (pts[i].t >= start.t && pts[i].t <= newest.t) out.push(pts[i].c);
+    }
+    return out.length >= 2 ? out : [];
   }
   function spark(id, series) {
     var svg = document.getElementById(id);
