@@ -10,6 +10,42 @@ const js = read("front-door-static/btc-eth-sol/btc-eth-sol.js");
 const nav = read("src/lib/desk/public-nav.ts");
 const start = read("scripts/do-start.mjs");
 
+function attr(tag, name) {
+  const needle = name + '="';
+  let from = 0;
+  while (from < tag.length) {
+    const start = tag.indexOf(needle, from);
+    if (start < 0) return undefined;
+    if (start === 0 || /\s/.test(tag[start - 1])) {
+      const open = start + needle.length;
+      const end = tag.indexOf('"', open);
+      if (end < 0) return undefined;
+      return tag.slice(open, end);
+    }
+    from = start + 1;
+  }
+  return undefined;
+}
+function tags(html, name) {
+  const open = "<" + name;
+  const out = [];
+  let i = 0;
+  while (i < html.length) {
+    const start = html.indexOf(open, i);
+    if (start < 0) break;
+    const after = html[start + open.length] || "";
+    if (after && after !== " " && after !== "\t" && after !== "\n" && after !== "/" && after !== ">") {
+      i = start + open.length;
+      continue;
+    }
+    const end = html.indexOf(">", start);
+    if (end < 0) break;
+    out.push(html.slice(start, end + 1));
+    i = end + 1;
+  }
+  return out;
+}
+
 test("one H1, title, description, canonical and schema carry BTC vs ETH vs SOL", () => {
   assert.equal((page.match(/<h1[\s>]/g) || []).length, 1);
   assert.match(page, /<h1 id="btc-eth-sol-h1">BTC vs ETH vs SOL:/);
@@ -70,6 +106,12 @@ test("client script: read-only GETs to public market data, no cookies, text only
   assert.doesNotMatch(js, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|method:\s*"(POST|PUT|DELETE)"/);
   assert.match(js, /dated snapshot/);
   assert.match(js, /live data unavailable/);
+  assert.match(js, /AbortController/);
+  assert.match(js, /signal: ac\.signal/);
+  assert.match(js, /REQUEST_MS/);
+  assert.match(js, /days \* 86400/);
+  assert.match(js, /ethbtc-history/);
+  assert.match(js, /soleth-history/);
 });
 
 test("served by the front door with a slash redirect, listed in the sitemap with its own lastmod", () => {
@@ -81,15 +123,28 @@ test("served by the front door with a slash redirect, listed in the sitemap with
   assert.ok(read("front-door-static/sitemap/index.html").includes('<a href="/btc-eth-sol/"><strong>BTC vs ETH vs SOL</strong></a>'));
 });
 
+test("the page does not link to a Solana flip FAQ answer that is not on this site", () => {
+  assert.doesNotMatch(page, /faq-sol-flip-eth/);
+});
+
 test("hero image (webp with jpg fallback) and the page's own share image, with the approved alt text", () => {
   const alt = "BTC vs ETH vs SOL: Bitcoin, Ethereum and Solana coins linked on a trading desk with price charts.";
-  assert.ok(page.includes('<source type="image/webp" srcset="/images/btc-eth-sol/btc-vs-eth-vs-sol-hero.webp" />'));
-  assert.ok(page.includes(`<img src="/images/btc-eth-sol/btc-vs-eth-vs-sol-hero.jpg" width="1600" height="900" alt="${alt}"`));
   const og = "https://s1r1us.ai/images/btc-eth-sol/btc-vs-eth-vs-sol-og.jpg";
-  assert.ok(page.includes(`<meta property="og:image" content="${og}" />`));
-  assert.ok(page.includes(`<meta name="twitter:image" content="${og}" />`));
-  assert.ok(page.includes(`<meta property="og:image:alt" content="${alt}" />`));
-  assert.ok(page.includes(`<meta name="twitter:image:alt" content="${alt}" />`));
+  const source = tags(page, "source").find((t) => attr(t, "srcset") === "/images/btc-eth-sol/btc-vs-eth-vs-sol-hero.webp");
+  assert.ok(source, "hero webp source");
+  assert.equal(attr(source, "type"), "image/webp");
+  const img = tags(page, "img").find((t) => attr(t, "src") === "/images/btc-eth-sol/btc-vs-eth-vs-sol-hero.jpg");
+  assert.ok(img, "hero jpg img");
+  assert.equal(attr(img, "width"), "1600");
+  assert.equal(attr(img, "height"), "900");
+  assert.equal(attr(img, "alt"), alt);
+  const metas = tags(page, "meta");
+  const meta = (key, value) =>
+    metas.find((t) => (attr(t, "property") === key || attr(t, "name") === key) && attr(t, "content") === value);
+  assert.ok(meta("og:image", og), "og:image");
+  assert.ok(meta("twitter:image", og), "twitter:image");
+  assert.ok(meta("og:image:alt", alt), "og:image:alt");
+  assert.ok(meta("twitter:image:alt", alt), "twitter:image:alt");
   assert.doesNotMatch(page, /sai-citizens-united-faq-og/);
   const ld = JSON.parse(page.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
   assert.equal(ld.image.url, og);

@@ -5,11 +5,25 @@
   "use strict";
   var CB = "https://api.exchange.coinbase.com/products/";
   var CG = "https://api.coingecko.com/api/v3/";
+  var REQUEST_MS = 10000;
 
   function getJson(url) {
-    return fetch(url, { headers: { accept: "application/json" }, credentials: "omit", cache: "no-store" }).then(function (r) {
+    var ac = new AbortController();
+    var timer = setTimeout(function () { ac.abort(); }, REQUEST_MS);
+    var req = fetch(url, {
+      headers: { accept: "application/json" },
+      credentials: "omit",
+      cache: "no-store",
+      signal: ac.signal,
+    }).then(function (r) {
       if (!r.ok) throw new Error("http " + r.status);
       return r.json();
+    });
+    var deadline = new Promise(function (_, reject) {
+      ac.signal.addEventListener("abort", function () { reject(new Error("timeout")); });
+    });
+    return Promise.race([req, deadline]).finally(function () {
+      clearTimeout(timer);
     });
   }
   function num(v) {
@@ -33,14 +47,22 @@
   function fixed(n, d) {
     return n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
   }
-  /* Coinbase daily candles: [time, low, high, open, close, volume], newest first. Returns closes oldest to newest. */
+  /* Coinbase daily candles: [time, low, high, open, close, volume], time in unix seconds.
+     Returns closes oldest to newest only when the timestamp span covers `days`, not merely the row count. */
   function closes(rows, days) {
-    if (!Array.isArray(rows)) return [];
-    return rows
+    if (!Array.isArray(rows) || days < 1) return [];
+    var pts = rows
       .filter(function (r) { return Array.isArray(r) && num(r[0]) && num(r[4]); })
-      .sort(function (a, b) { return a[0] - b[0]; })
-      .slice(-(days + 1))
-      .map(function (r) { return Number(r[4]); });
+      .map(function (r) { return { t: Number(r[0]), c: Number(r[4]) }; })
+      .sort(function (a, b) { return a.t - b.t; });
+    if (pts.length < 2) return [];
+    var newest = pts[pts.length - 1].t;
+    var need = days * 86400;
+    var slack = 2 * 86400;
+    var window = pts.filter(function (p) { return p.t >= newest - need - slack && p.t <= newest; });
+    if (window.length < 2) return [];
+    if (newest - window[0].t < need - slack) return [];
+    return window.map(function (p) { return p.c; });
   }
   function spark(id, series) {
     var svg = document.getElementById(id);
@@ -103,14 +125,13 @@
       Promise.all([getJson(CB + "ETH-BTC/stats"), getJson(CB + "ETH-BTC/candles?granularity=86400")]).then(function (r) {
         var last = num(r[0].last);
         if (!last) throw new Error("ethbtc");
+        var s = closes(r[1], 30);
+        if (s.length < 2) throw new Error("ethbtc-history");
         set("bes-eth-btc", fixed(last, 5) + " BTC");
         set("bes-btc-eth", "1 BTC = " + fixed(1 / last, 2) + " ETH");
-        var s = closes(r[1], 30);
-        if (s.length > 1) {
-          s[s.length - 1] = last;
-          setChange("bes-eth-btc-chg", ((last - s[0]) / s[0]) * 100, "in 30 days");
-          spark("bes-eth-btc-spark", s);
-        }
+        s[s.length - 1] = last;
+        setChange("bes-eth-btc-chg", ((last - s[0]) / s[0]) * 100, "in 30 days");
+        spark("bes-eth-btc-spark", s);
       }),
     ),
   );
@@ -121,15 +142,15 @@
       Promise.all([getJson(CB + "SOL-ETH/stats"), getJson(CB + "SOL-ETH/candles?granularity=86400")]).then(function (r) {
         var solEth = num(r[0].last);
         if (!solEth) throw new Error("soleth");
+        var s = closes(r[1], 30);
+        if (s.length < 2) throw new Error("soleth-history");
         var ethSol = 1 / solEth;
         set("bes-eth-sol", "1 ETH = " + fixed(ethSol, 2) + " SOL");
         set("bes-sol-eth", "1 SOL = " + fixed(solEth, 5) + " ETH");
-        var s = closes(r[1], 30).map(function (v) { return 1 / v; });
-        if (s.length > 1) {
-          s[s.length - 1] = ethSol;
-          setChange("bes-eth-sol-chg", ((ethSol - s[0]) / s[0]) * 100, "in 30 days");
-          spark("bes-eth-sol-spark", s);
-        }
+        var series = s.map(function (v) { return 1 / v; });
+        series[series.length - 1] = ethSol;
+        setChange("bes-eth-sol-chg", ((ethSol - series[0]) / series[0]) * 100, "in 30 days");
+        spark("bes-eth-sol-spark", series);
       }),
     ),
   );
