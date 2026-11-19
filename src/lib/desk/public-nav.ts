@@ -478,6 +478,15 @@ export const PUBLIC_PAGES = [
     changefreq: "monthly",
     priority: "0.5",
   },
+  {
+    path: "/btc-eth-sol",
+    loc: `${origin}/btc-eth-sol/`,
+    label: "BTC vs ETH vs SOL",
+    title: "BTC vs ETH vs SOL: Ratios, Dominance and Outlook · S1R1US.ai",
+    hint: "BTC vs ETH vs SOL: live ETH/BTC and ETH/SOL ratios, bitcoin dominance over alt coins, and our view on why Solana is replacing Ethereum. Not financial advice.",
+    changefreq: "weekly",
+    priority: "0.6",
+  },
 
   {
     path: "/sitemap",
@@ -715,6 +724,7 @@ export const SITEMAP_PAGE_LASTMOD: Record<string, string> = {
   [`${origin}/dripped-out-matrix/`]: "2026-10-18",
   [`${origin}/hindu-teachings/`]: "2026-10-25",
   [`${origin}/what-inspired-us/`]: "2026-10-25",
+  [`${origin}/btc-eth-sol/`]: "2026-11-18",
   [`${origin}/sitemap/`]: "2026-10-25",
   [`${origin}/agent/`]: "2026-10-25",
   [`${origin}/forum/`]: "2026-10-25",
