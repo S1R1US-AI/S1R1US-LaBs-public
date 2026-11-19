@@ -280,6 +280,12 @@ jobs:
             fi
           fi
           [ "$full" = "1" ] || exit 0
+          # A shallow clone can hide first-parent history, so a tip older than 48 hours
+          # would skip the blocking new-findings pass. Fail closed unless history is complete.
+          shallow="$(git rev-parse --is-shallow-repository)" || { echo "::error::could not tell if the repository is shallow; failing closed"; exit 1; }
+          if [ "$shallow" != "false" ]; then
+            echo "::error::shallow repository: the 48-hour new-findings pass cannot see full history; failing closed"; exit 1
+          fi
           # Blocking pass for schedule / manual runs: anything new since the baseline fails, with the same
           # rules as a ranged scan (nothing waived). Baseline: the older of the first-parent commit from
           # 48 hours ago and HEAD~20 (first parent), so commit dates alone cannot shrink the window.
