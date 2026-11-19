@@ -125,6 +125,16 @@
     });
   }
 
+  /* Flippening tracker: ETH market value as a share of bitcoin's (100% would be a flippening). */
+  function flip(eth, btc) {
+    var pct = (eth / btc) * 100;
+    var meter = document.getElementById("bes-flip-meter");
+    if (meter) meter.value = Math.min(pct, 100);
+    set("bes-flip-share", "ETH is " + fixed(pct, 1) + "% of the way to a flippening.");
+    if (eth < btc) set("bes-flip-gap", "Ethereum would need about " + fixed(btc / eth, 1) + "× its market value to pass bitcoin.");
+    else set("bes-flip-gap", "Ethereum's market value is above bitcoin's right now.");
+  }
+
   var jobs = [];
 
   jobs.push(
@@ -187,8 +197,10 @@
         set("bes-cap-eth-sol", fixed(eth / sol, 2) + "×");
         set("bes-cap-sol-eth", "Solana is about " + fixed((sol / eth) * 100, 1) + "% of Ethereum");
         set("bes-cap-eth-btc", fixed((eth / btc) * 100, 1) + "%");
+        flip(eth, btc);
       }).catch(function (err) {
         set("bes-cap-sol-eth", "Live data unavailable");
+        set("bes-flip-share", "Live data unavailable");
         throw err;
       }),
       " · live data unavailable",

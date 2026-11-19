@@ -116,7 +116,7 @@ test("one H1, title, description, canonical and schema carry BTC vs ETH vs SOL",
   assert.match(page, /<link rel="canonical" href="https:\/\/s1r1us\.ai\/btc-eth-sol\/" \/>/);
   assert.match(page, /<meta property="og:url" content="https:\/\/s1r1us\.ai\/btc-eth-sol\/" \/>/);
   const ld = JSON.parse(page.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
-  assert.equal(ld["@type"], "Article");
+  assert.equal(ld["@type"], "SatiricalArticle");
   assert.equal(ld.url, "https://s1r1us.ai/btc-eth-sol/");
   assert.equal(ld.publisher.name, "SAI Citizens United LTD");
 });
@@ -274,4 +274,48 @@ test("hero image (webp with jpg fallback) and the page's own share image, with t
   for (const n of ["btc-vs-eth-vs-sol-hero.webp", "btc-vs-eth-vs-sol-hero.jpg", "btc-vs-eth-vs-sol-og.jpg"]) {
     assert.ok(readFileSync(new URL(`../front-door-static/images/btc-eth-sol/${n}`, import.meta.url)).length > 0, n);
   }
+});
+
+test("satire label is visible near the top and in the not-advice copy, and Bitcoin is king", () => {
+  const main = page.split('<main class="bes">')[1];
+  assert.ok(main.indexOf('class="bes-satire"') >= 0 && main.indexOf('class="bes-satire"') < main.indexOf("<h1"));
+  assert.match(page, /This page is satire, because Bitcoin is king\./);
+  assert.match(page, /This page is also satire: Bitcoin is king/);
+  assert.match(page, /"genre": "Satire"/);
+});
+
+test("Vitalik Buterin quotes: each links to his blog, verbatim lines kept, and no endorsement is implied", () => {
+  const sec = page.split('id="vitalik-buterin-quotes"')[1].split("</section>")[0];
+  const quotes = sec.split('<blockquote class="bes-quote"').slice(1);
+  assert.equal(quotes.length, 11);
+  for (const q of quotes) {
+    assert.match(q, /cite="https:\/\/vitalik\.eth\.limo\/general\/\d{4}\/\d{2}\/\d{2}\/[a-z0-9_]+\.html"/);
+    assert.match(q, /<footer>Vitalik Buterin, <a href="https:\/\/vitalik\.eth\.limo\/general\//);
+  }
+  assert.ok(sec.includes("Bitcoin is trying to solve one problem, or at most two or three. Ethereum, on the other hand, has lots of sub-communities with lots of different focuses. There is no single dominant narrative."));
+  assert.ok(sec.includes("The profound benefit of the Ethereum rollup-centric roadmap is that it means that Ethereum is open to all of the futures, and does not have to commit to an opinion about which one will necessarily win."));
+  assert.match(sec, /He has no connection to S1R1US\.ai and does not endorse this page or our opinions\./);
+  const ld = JSON.parse(page.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+  for (const c of ld.citation) assert.ok(sec.includes(c.url), c.url);
+});
+
+test("Br0k3n S0ft on Vitalik keeps the opinion framing and the page closes on a Br0k3n S0ft line", () => {
+  const sec = page.split('id="br0k3n-s0ft-on-vitalik"')[1].split("</section>")[0];
+  assert.ok(sec.includes("The ETH roadmap, as we see it, is literal spaghetti code, and there is no end in sight to the circular nature of ETH development."));
+  assert.ok(sec.includes("On Vitalik Buterin: in our view, he lacked the leadership and vision of a true warrior in an arena of gladiators."));
+  const main = page.split('<main class="bes">')[1].split("</main>")[0];
+  const last = main.slice(main.lastIndexOf("<section"));
+  assert.match(last, /id="bitcoin-is-king"/);
+  assert.match(last, /<footer>Br0k3n S0ft, November 17, 2026<\/footer>/);
+});
+
+test("flippening tracker reads the same CoinGecko market values and fails honestly", () => {
+  assert.match(page, /<meter id="bes-flip-meter" min="0" max="100" value="0"/);
+  assert.match(js, /function flip\(eth, btc\)/);
+  assert.match(js, /flip\(eth, btc\);/);
+  assert.match(js, /set\("bes-flip-share", "Live data unavailable"\)/);
+});
+
+test("earlier FAQ snapshots are kept with their dates and sources", () => {
+  assert.ok(page.includes("11:07 AM ET, October 30, 2026: Ethereum's market value was about 4.9 times Solana's, so Solana was worth roughly 20% of Ethereum (CoinGecko data)."));
 });
