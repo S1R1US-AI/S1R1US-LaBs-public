@@ -809,7 +809,7 @@ function FeedsMorningSection() {
       </ul>
       <p className="mt-3 text-xs leading-relaxed text-muted">
         2026 free stack still fit: Coinbase public last (no key), mempool.space / blockchain.info (on-chain),
-        Alternative.me F&G, FRED, SoSoValue ETF, DeFiLlama stables, OKX/Bybit/HL public. CoinGlass and
+        Alternative.me {"F&G"}, FRED, SoSoValue ETF, DeFiLlama stables, OKX/Bybit/HL public. CoinGlass and
         CoinMarketCap stay out (paid keys). SuperGrok is operator Ask Grok; visitors use BYO compute.
       </p>
     </Panel>
