@@ -115,7 +115,7 @@ export function DeskWorkspace({
               </dd>
             </div>
             <div>
-              <dt className="coinbase-orange text-[10px] tracking-[0.08em] uppercase">F&G</dt>
+              <dt className="coinbase-orange text-[10px] tracking-[0.08em] uppercase">{"F&G"}</dt>
               <dd className={cn("text-sm font-medium tabular-nums", vsAvg(snap?.fearGreed?.value, 50))}>
                 {snap?.fearGreed?.value ?? "—"} {snap?.fearGreed?.label ?? ""}
               </dd>
