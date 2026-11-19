@@ -99,7 +99,7 @@ export function SponsorPage() {
               className="mx-auto h-auto w-full max-w-[200px]"
             />
             <figcaption className="mt-2 text-center text-xs text-muted">
-              GitHub Sponsors / Patreon / Polar donation type — a sponsor heart, settled as a BTC gift.
+              GitHub Sponsors / Patreon donation type — a sponsor heart, settled as a BTC gift.
             </figcaption>
           </figure>
           <figure className="rounded-md border border-rule p-3">

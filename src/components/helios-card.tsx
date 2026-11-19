@@ -183,7 +183,7 @@ export function HeliosCard({
               </div>
               <div>
                 <dt className={cn("text-[13px] tracking-[0.14em] uppercase", fgTone(tape.fg, tape.fgLabel) || "text-muted")}>
-                  Fear & Greed
+                  {"Fear & Greed"}
                 </dt>
                 <dd className={cn("mt-0.5 font-mono text-[17px] tabular-nums", fgTone(tape.fg, tape.fgLabel))}>
                   {tape.fg != null ? String(tape.fg) : "—"}
@@ -225,7 +225,7 @@ export function HeliosCard({
               </div>
               <div>
                 <dt className={cn("text-[13px] tracking-[0.14em] uppercase", fgTone(tape.fg, tape.fgLabel) || "text-muted")}>
-                  Fear & Greed
+                  {"Fear & Greed"}
                 </dt>
                 <dd className={cn("mt-0.5 font-mono text-[17px] tabular-nums", fgTone(tape.fg, tape.fgLabel))}>
                   {tape.fg != null ? String(tape.fg) : "—"}

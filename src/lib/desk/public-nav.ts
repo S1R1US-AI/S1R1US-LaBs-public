@@ -277,7 +277,7 @@ export const PUBLIC_PAGES = [
     loc: `${origin}${SPONSOR_PATH}/`,
     label: TAB_SPONSOR,
     title: PAGE_TITLE_SPONSOR,
-    hint: `${TAB_SPONSOR} (${SEO_TAB_SPONSOR}) · GitHub Sponsors · Patreon · Open Collective · Ko-fi · Tidelift · Community Bridge · Liberapay · IssueHunt · LFX Crowdfunding · Polar · Buy Me a Coffee · thanks.dev donation types as direct BTC + native USDC gifts · FUNDING.yml map`,
+    hint: `${TAB_SPONSOR} (${SEO_TAB_SPONSOR}) · GitHub Sponsors · Patreon · Open Collective · Ko-fi · Tidelift · Community Bridge · Liberapay · IssueHunt · LFX Crowdfunding · Buy Me a Coffee · thanks.dev donation types as direct BTC + native USDC gifts · FUNDING.yml map`,
     changefreq: "weekly",
     priority: "0.6",
   },

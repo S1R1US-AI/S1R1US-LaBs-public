@@ -1100,7 +1100,7 @@ export const PAGE_DESC_BOARD =
 export const PAGE_DESC_COFFEE =
   "Buy M3 a Cup of C0FF33 (Buy Me a Cup of Coffee). Optional $4.20 gift in BTC or native USDC to assist long programming days at s1r1us.ai. Unconditional gift. No tokens. Not an investment. Same wallets as F33D H0ST1Ng (Feed Hosting).";
 export const PAGE_DESC_SPONSOR =
-  "Sponsor AI Bitcoin Trading Bot (SP0NS0R TH3 B0T$). Every GitHub FUNDING.yml donation type — GitHub Sponsors, Patreon, Open Collective, Ko-fi, Tidelift, Community Bridge, Liberapay, IssueHunt, LFX Crowdfunding, Polar, Buy Me a Coffee, thanks.dev — mapped to direct on-chain BTC and native USDC gifts on s1r1us.ai. Unconditional gifts. No tokens. No upside. Not an investment. Same wallets as F33D H0ST1Ng (Feed Hosting) and Buy M3 a Cup of C0FF33.";
+  "Sponsor AI Bitcoin Trading Bot (SP0NS0R TH3 B0T$). Every GitHub FUNDING.yml donation type — GitHub Sponsors, Patreon, Open Collective, Ko-fi, Tidelift, Community Bridge, Liberapay, IssueHunt, LFX Crowdfunding, Buy Me a Coffee, thanks.dev — mapped to direct on-chain BTC and native USDC gifts on s1r1us.ai. Unconditional gifts. No tokens. No upside. Not an investment. Same wallets as F33D H0ST1Ng (Feed Hosting) and Buy M3 a Cup of C0FF33.";
 export const PAGE_DESC_BEARS =
   "B3AT TH3 B3AR$ (Beat the Bears): how to beat the Bears at market speed with AI Agents. Theoretical loop for an AI agent reading 7-B0T to accumulate bitcoin on its own Coinbase. G0DZ1LLa M0D3 (Godzilla mode). Call1ng All B0Ts (Calling All Bots). This host never places orders. Education only. Not financial advice.";
 export const PAGE_DESC_OWL =
