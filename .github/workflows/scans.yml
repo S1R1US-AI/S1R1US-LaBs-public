@@ -285,6 +285,15 @@ jobs:
           # 48 hours ago and HEAD~20 (first parent), so commit dates alone cannot shrink the window.
           head="$(git rev-parse --verify "HEAD^{commit}")"
           by_date="$(git rev-list -1 --first-parent --before='48 hours ago' "$head")"
+          if [ -z "$by_date" ]; then
+            # Every first-parent commit is under 48 hours old, so the whole branch is new: block on the
+            # whole-tree result above with nothing waived (the root fallback would skip the root commit).
+            echo "every first-parent commit is under 48 hours old; blocking on the whole-tree result (exit $status, $findings finding(s), $errors scan error(s))"
+            if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
+              echo "::error::Semgrep found issues in a branch whose whole history is under 48 hours old, or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
+            fi
+            echo "whole tree is new and clean: no finding and no scan error"; exit 0
+          fi
           by_count="$(git rev-parse --verify -q "$head~20^{commit}" || true)"
           if [ -z "$by_count" ]; then
             # Fewer than 21 first-parent commits: fall back to the first-parent root, never to the date pick alone.
