@@ -111,11 +111,8 @@ export function ensureDeskStateDir(): string {
   } catch (err) {
     if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") throw err;
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    try {
-      chmodSync(dir, 0o700);
-    } catch {
-      /* rechecked below */
-    }
+    // No chmod here: it would follow a symlink planted after the ENOENT. The checks below refuse a
+    // symlink first, then repair only missing owner bits on the real directory.
     st = lstatSync(dir);
   }
   if (st.isSymbolicLink() || !st.isDirectory()) {

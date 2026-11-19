@@ -141,6 +141,20 @@ describe("private state directory and atomic writes", () => {
     }
   });
 
+  it("a strict umask that drops owner bits is still repaired to 0700 after the symlink check", () => {
+    const old = process.umask(0o377);
+    let dir: string;
+    try {
+      dir = ensureDeskStateDir();
+    } finally {
+      process.umask(old);
+    }
+    scratch.push(dir);
+    const st = lstatSync(dir);
+    assert.equal(st.isSymbolicLink(), false);
+    assert.equal(st.mode & 0o777, 0o700);
+  });
+
   it("creates the state folder at 0700, owned by this process, and refuses a symlink", () => {
     const dir = ensureDeskStateDir();
     scratch.push(dir);
