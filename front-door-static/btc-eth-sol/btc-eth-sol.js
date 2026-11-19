@@ -129,7 +129,10 @@
   function flip(eth, btc) {
     var pct = (eth / btc) * 100;
     var meter = document.getElementById("bes-flip-meter");
-    if (meter) meter.value = Math.min(pct, 100);
+    if (meter) {
+      meter.value = Math.min(pct, 100);
+      meter.hidden = false;
+    }
     set("bes-flip-share", "ETH is " + fixed(pct, 1) + "% of the way to a flippening.");
     if (eth < btc) set("bes-flip-gap", "Ethereum would need about " + fixed(btc / eth, 1) + "× its market value to pass bitcoin.");
     else set("bes-flip-gap", "Ethereum's market value is above bitcoin's right now.");

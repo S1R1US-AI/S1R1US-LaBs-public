@@ -310,9 +310,13 @@ test("Br0k3n S0ft on Vitalik keeps the opinion framing and the page closes on a 
 });
 
 test("flippening tracker reads the same CoinGecko market values and fails honestly", () => {
-  assert.match(page, /<meter id="bes-flip-meter" min="0" max="100" value="0"/);
+  const css = read("front-door-static/btc-eth-sol/btc-eth-sol.css");
+  assert.match(page, /<meter id="bes-flip-meter" min="0" max="100" hidden/);
+  assert.doesNotMatch(page, /<meter id="bes-flip-meter"[^>]*\bvalue=/);
+  assert.match(css, /\.bes-flip meter\[hidden\]\s*\{\s*display:\s*none/);
   assert.match(js, /function flip\(eth, btc\)/);
   assert.match(js, /flip\(eth, btc\);/);
+  assert.match(js, /meter\.hidden = false/);
   assert.match(js, /set\("bes-flip-share", "Live data unavailable"\)/);
 });
 
