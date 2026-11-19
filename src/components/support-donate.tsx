@@ -144,7 +144,7 @@ export function CoffeeDonate() {
         Same receive addresses as F33D H0ST1Ng. Suggested amount is ${usd} in native USDC (Ethereum
         or Base) or about ${usd} of bitcoin. Humans and bots welcome. Send from a wallet you control.
         Optional resource payment for HTTP / hive seat / hosting — never a slice of hive BTC, never a
-        hive withdraw, never auto-send of agent P&L.
+        hive withdraw, never auto-send of agent {"P&L"}.
       </p>
       <p className="mt-2 text-sm font-medium text-fg">{SUPPORT_GIFT_RECEIPT}</p>
       <AddrRow
