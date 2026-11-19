@@ -280,11 +280,26 @@ jobs:
             fi
           fi
           [ "$full" = "1" ] || exit 0
+          # A shallow clone can hide first-parent history, so a tip older than 48 hours
+          # would skip the blocking new-findings pass. Fail closed unless history is complete.
+          shallow="$(git rev-parse --is-shallow-repository)" || { echo "::error::could not tell if the repository is shallow; failing closed"; exit 1; }
+          if [ "$shallow" != "false" ]; then
+            echo "::error::shallow repository: the 48-hour new-findings pass cannot see full history; failing closed"; exit 1
+          fi
           # Blocking pass for schedule / manual runs: anything new since the baseline fails, with the same
           # rules as a ranged scan (nothing waived). Baseline: the older of the first-parent commit from
           # 48 hours ago and HEAD~20 (first parent), so commit dates alone cannot shrink the window.
           head="$(git rev-parse --verify "HEAD^{commit}")"
           by_date="$(git rev-list -1 --first-parent --before='48 hours ago' "$head")"
+          if [ -z "$by_date" ]; then
+            # Every first-parent commit is under 48 hours old, so the whole branch is new: block on the
+            # whole-tree result above with nothing waived (the root fallback would skip the root commit).
+            echo "every first-parent commit is under 48 hours old; blocking on the whole-tree result (exit $status, $findings finding(s), $errors scan error(s))"
+            if [ "$status" -ne 0 ] || [ "$findings" -ne 0 ] || [ "$errors" -ne 0 ]; then
+              echo "::error::Semgrep found issues in a branch whose whole history is under 48 hours old, or could not finish cleanly (exit $status, $errors scan error(s))"; exit 1
+            fi
+            echo "whole tree is new and clean: no finding and no scan error"; exit 0
+          fi
           by_count="$(git rev-parse --verify -q "$head~20^{commit}" || true)"
           if [ -z "$by_count" ]; then
             # Fewer than 21 first-parent commits: fall back to the first-parent root, never to the date pick alone.
