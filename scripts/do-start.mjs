@@ -738,6 +738,21 @@ export function canonicalRedirect(req, target) {
   return null;
 }
 
+/**
+ * Strip CR, LF, and other control characters (C0, DEL, C1 0x80-0x9f, and the
+ * Unicode line and paragraph separators) so request-controlled text cannot wrap
+ * log lines or send terminal control sequences.
+ */
+export function logSafe(value) {
+  return String(value ?? "")
+    .replace(/[\r\n]/g, "")
+    .replace(/[\s\S]/g, (ch) => {
+      const code = ch.charCodeAt(0);
+      if (code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f) || code === 0x2028 || code === 0x2029) return "";
+      return ch;
+    });
+}
+
 /** Data replies under /api/ are for programs, not search results: ask crawlers not to index them. */
 export function isApiPath(url) {
   const path = String(url || "").split(/[?#]/, 1)[0];
@@ -753,7 +768,7 @@ function proxyToNitro(req, res, { privateAsset = false } = {}) {
     method: req.method,
     headers,
   };
-  res.on("error", (err) => console.error("[s1r1us] client response error:", err.message));
+  res.on("error", (err) => console.error("[s1r1us] client response error:", logSafe(err.message)));
   const upstream = http.request(opts, (up) => {
     up.on("error", () => res.destroy());
     const outHeaders = privateAsset ? privateAssetHeaders(up.headers) : { ...up.headers };
@@ -763,7 +778,7 @@ function proxyToNitro(req, res, { privateAsset = false } = {}) {
     up.pipe(res);
   });
   upstream.on("error", (err) => {
-    console.error("[s1r1us] nitro proxy error:", err.message);
+    console.error("[s1r1us] nitro proxy error:", logSafe(err.message));
     if (!res.headersSent) {
       res.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("Bad Gateway");
@@ -816,7 +831,7 @@ export function startFrontDoor({
     try {
       pathname = new URL(url, "http://localhost").pathname;
     } catch {
-      pathname = url.split("?")[0] || "/";
+      pathname = "/";
     }
 
     // Sensei HOLD fix: GET /search?q= must reach Nitro desk search — do not swallow with static overlay.
@@ -825,7 +840,7 @@ export function startFrontDoor({
       const u = new URL(url, "http://localhost");
       const q = u.searchParams.get("q");
       if ((u.pathname === "/search" || u.pathname === "/search/") && q != null && String(q).length > 0) {
-        console.log(`[s1r1us] front-door proxy Nitro search q ${req.method} ${u.pathname}`);
+        console.log(`[s1r1us] front-door proxy Nitro search q ${logSafe(req.method)} ${logSafe(u.pathname)}`);
         return proxyToNitro(req, res);
       }
     } catch {
@@ -887,7 +902,7 @@ export function startFrontDoor({
     if (dirExact.includes(pathname)) {
       const q = (url.includes("?") ? url.slice(url.indexOf("?")) : "");
       const loc = pathname + "/" + q;
-      console.log(`[s1r1us] front-door static overlay 308 ${pathname} → ${pathname}/`);
+      console.log(`[s1r1us] front-door static overlay 308 ${logSafe(pathname)} → ${logSafe(pathname)}/`);
       res.writeHead(308, { Location: loc, "Cache-Control": "public, max-age=60" });
       res.end();
       return;
@@ -905,7 +920,7 @@ export function startFrontDoor({
 
     // Reject obvious traversal in path before static resolve
     if (pathname.includes("..") || pathname.includes("%2e%2e") || pathname.includes("%2E%2E")) {
-      console.log(`[s1r1us] front-door static overlay 400 ${pathname}`);
+      console.log(`[s1r1us] front-door static overlay 400 ${logSafe(pathname)}`);
       res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("Bad Request");
       return;
@@ -926,11 +941,11 @@ export function startFrontDoor({
 
     const abs = resolveStatic(pathname);
     if (abs) {
-      console.log(`[s1r1us] front-door static overlay ${req.method} ${pathname}`);
+      console.log(`[s1r1us] front-door static overlay ${logSafe(req.method)} ${logSafe(pathname)}`);
       try {
         await serveStatic(res, abs, req);
       } catch (err) {
-        console.error("[s1r1us] static serve error:", err.message);
+        console.error("[s1r1us] static serve error:", logSafe(err.message));
         if (!res.headersSent) {
           res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
         }
@@ -1005,14 +1020,14 @@ export function startFrontDoor({
         pathname.startsWith("/gm") ||
         pathname.startsWith("/f33d")
       ) {
-        console.log(`[s1r1us] front-door static overlay 404 ${pathname}`);
+        console.log(`[s1r1us] front-door static overlay 404 ${logSafe(pathname)}`);
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
         res.end("Not Found");
         return;
       }
     }
 
-    console.log(`[s1r1us] nitro proxy ${req.method} ${pathname}`);
+    console.log(`[s1r1us] nitro proxy ${logSafe(req.method)} ${logSafe(pathname)}`);
     proxyToNitro(req, res);
   };
 
@@ -1021,7 +1036,7 @@ export function startFrontDoor({
       applyFrontDoorSecurityHeaders(req, res);
       await handleRequest(req, res);
     } catch (err) {
-      console.error("[s1r1us] front-door handler error:", err && err.message);
+      console.error("[s1r1us] front-door handler error:", logSafe(err && err.message));
       if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
         res.end("Internal Server Error");

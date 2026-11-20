@@ -1,7 +1,6 @@
 /** Interest list for auto-trade go-live + maintenance invites. Server-only. No webhooks. */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { deskStorePaths, parentDir } from "./data-path.ts";
+import { deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 import { unsafeMarkup } from "./text-guard";
 import { inspectAgentInput } from "./agent-security";
 import { agentBlockedPayload } from "./agent-notice";
@@ -79,7 +78,7 @@ function ensureTestWaitlist(s: Store): Store {
 function load(): Store {
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const raw = JSON.parse(readDeskFile(p)) as Store;
       if (Array.isArray(raw?.rows)) {
         return ensureTestWaitlist({
           rows: raw.rows.slice(0, MAX).map((r) => ({
@@ -106,8 +105,7 @@ function save(s: Store) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

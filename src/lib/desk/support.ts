@@ -57,7 +57,6 @@ export const FUNDING_PLATFORMS: FundingPlatform[] = [
   { key: "liberapay", platform: "Liberapay", type: "recurrent donations", path: SUPPORT_FEED_PATH, fit: "F33D H0ST1Ng (Feed Hosting)" },
   { key: "issuehunt", platform: "IssueHunt", type: "issue bounty gifts", path: SUPPORT_SPONSOR_PATH, fit: "SP0NS0R TH3 B0T$ — OSS bounty-style gifts" },
   { key: "lfx_crowdfunding", platform: "LFX Crowdfunding", type: "project crowdfunding", path: SUPPORT_SPONSOR_PATH, fit: "SP0NS0R TH3 B0T$ crowdfund goal" },
-  { key: "polar", platform: "Polar", type: "open-source funding hub", path: SUPPORT_SPONSOR_PATH, fit: "SP0NS0R TH3 B0T$ (Sponsor AI Bitcoin Trading Bot)" },
   { key: "buy_me_a_coffee", platform: "Buy Me a Coffee", type: "coffee-style tip", path: SUPPORT_COFFEE_PATH, fit: "Buy M3 a Cup of C0FF33 (Buy Me a Cup of Coffee) $4.20" },
   { key: "thanks_dev", platform: "thanks.dev", type: "gratitude-based OSS gifts", path: SUPPORT_FEED_PATH, fit: "F33D H0ST1Ng (Feed Hosting)" },
   { key: "custom", platform: "Custom sponsorship URLs", type: "direct donation links", path: SUPPORT_SPONSOR_PATH, fit: "s1r1us.ai gift pages + GET /api/agent/fee rails" },

@@ -33,7 +33,7 @@ export function SystemOverview({ showRoadmap = false }: { showRoadmap?: boolean 
       <p className="text-sm text-muted">
         {helios?.name ?? BOT7_NAME} is the overseer. Bots 1–6 vote orthogonal lanes. Two agreeing
         lanes are required for HIGH conviction. SuperGrok is the operator Ask Grok feed. Visitors use BYO compute. Tape paints in two
-        beats — core ({view.cycle.coreMs / 1000}s: price, RSI, F&G, leverage, Asia, ETF flow) then
+        beats — core ({view.cycle.coreMs / 1000}s: price, RSI, {"F&G"}, leverage, Asia, ETF flow) then
         fill (holders, news, filings, EM, macro). Same roster as {TAB_DESK}. {TAB_LAB} overlays that
         tape. <GodzillaModeLabel /> is an isolated sleeve (practice for all, Live admin-only) and does not vote
         bots 1–7. This block rebuilds on every 5-minute pull.

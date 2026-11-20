@@ -1,11 +1,10 @@
 /** Server-only tenants for the iOS / Google copy-admin. Not system admin. */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { looksLikeCompanyX } from "./x-admin.ts";
 import { looksLikeAdminX } from "./x-admin.server.ts";
 import { inspectAgentInput } from "./agent-security.ts";
-import { deskStorePaths, parentDir } from "./data-path.ts";
+import { deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 import { limitFromEnv } from "./limit-env.ts";
 import { APP_ADMIN_KINDS, APP_ADMIN_PATH, isAppAdminKind, type AppAdminKind } from "./tenancy.ts";
 
@@ -37,7 +36,7 @@ function load(): Store {
   if (typeof window !== "undefined") return { rows: [] };
   for (const p of paths()) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const raw = JSON.parse(readDeskFile(p)) as Store;
       if (Array.isArray(raw?.rows)) return { rows: raw.rows.slice(0, MAX) };
     } catch {
       /* missing */
@@ -51,8 +50,7 @@ function save(s: Store) {
   const body = JSON.stringify(s);
   for (const p of paths()) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

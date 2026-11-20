@@ -25,9 +25,20 @@ Live sim · live trades off · paper research. See [DEPLOY.md](DEPLOY.md) · [/r
 | **Discord** | [discord.gg/FVkXFWMxeX](https://discord.gg/FVkXFWMxeX) |
 | **X** | [@S1R1US_AI](https://x.com/S1R1US_AI) |
 | **Substack** | [@br0k3ns0ft](https://br0k3ns0ft.substack.com/about) |
+| **Patreon** | [S1R1US_ai_donations](https://patreon.com/S1R1US_ai_donations) |
 | **TikTok** | [@S1R1US.ai](https://www.tiktok.com/@S1R1US.ai) |
 
 Bugs → GitHub Issues · announcements → X · chat/support → Discord. License: Apache 2.0.
+
+## Donations / Support
+
+Thank you to all users and OSS contributors for supporting the S1R1US.ai OSS project.
+
+- **Patreon:** [patreon.com/S1R1US_ai_donations](https://patreon.com/S1R1US_ai_donations) — mission, goals, team and every wallet: [Patreon S1R1US.ai OSS Donations](https://s1r1us.ai/patreon-s1r1us-ai-oss-donations/)
+- **Direct BTC / USDC gifts:** copyable receive addresses on [F33D H0ST1Ng](https://s1r1us.ai/f33d/#donate), [Buy M3 a Cup of C0FF33](https://s1r1us.ai/c0ff33) and [SP0NS0R TH3 B0T$](https://s1r1us.ai/sponsor-ai-bitcoin-trading-bot)
+- **GitHub:** star, follow or contribute to the public code: [S1R1US-AI/S1R1US-LaBs-public](https://github.com/S1R1US-AI/S1R1US-LaBs-public) (this repo)
+
+Unconditional gifts. No tokens. No upside. No tax advice. Not an investment.
 
 ## Contact / How to reach the team
 

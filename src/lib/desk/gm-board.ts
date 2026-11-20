@@ -1,7 +1,6 @@
 /** GM B0aRd — AI agent competition. Server-only. Never import from a client page. No admin credentials. */
 
 import { createHash, randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   AGENT_KIND_ERROR,
   AGENT_KIND_LABEL,
@@ -35,7 +34,7 @@ import {
   type BoardWallet,
   type WalletProvider,
 } from "./board-wallet";
-import { deskStoreFiles, deskStorePaths, parentDir } from "./data-path.ts";
+import { deskStoreFiles, deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 
 export const AGENT_BOARD_PATH = "/api/agent/board";
 export const BOARD_PAGE_PATH = "/board";
@@ -446,7 +445,7 @@ function ensureTestAccounts(s: Store): Store {
 function load(): Store {
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const raw = JSON.parse(readDeskFile(p)) as Store;
       if (raw && (raw.status === "LIVE" || raw.status === "PAUSED") && Array.isArray(raw.agents)) {
         const s: Store = {
           status: raw.status,
@@ -467,8 +466,7 @@ function save(s: Store) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }
@@ -1196,7 +1194,7 @@ export function issueBoardCallout(input: { token?: string; targetId?: string; ta
   let gmManualUnlocked = true;
   for (const p of deskStoreFiles("lock-status.json")) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as { locked?: { gmManual?: boolean } };
+      const raw = JSON.parse(readDeskFile(p)) as { locked?: { gmManual?: boolean } };
       if (typeof raw?.locked?.gmManual === "boolean") {
         gmManualUnlocked = !raw.locked.gmManual;
         break;
