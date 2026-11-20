@@ -160,8 +160,14 @@ function main(argv = process.argv.slice(2)) {
   }
   if (t.config) {
     const cfgPath = join(ROOT, t.config);
-    if (!existsSync(cfgPath)) fail(`expected ${target} output is missing: ${t.config}`);
-    writeFileSync(cfgPath, `${JSON.stringify(vercelRoutes(JSON.parse(readFileSync(cfgPath, "utf8")), gated), null, 2)}\n`);
+    let raw;
+    try {
+      raw = readFileSync(cfgPath, "utf8");
+    } catch (err) {
+      if (err?.code === "ENOENT") fail(`expected ${target} output is missing: ${t.config}`);
+      throw err;
+    }
+    writeFileSync(cfgPath, `${JSON.stringify(vercelRoutes(JSON.parse(raw), gated), null, 2)}\n`);
   }
   // The current build's public names in the admin families; the front door denies any other name.
   const current = readdirSync(pubDir).filter(isAdminFamily).sort();

@@ -5,14 +5,14 @@
  * Stray practice AUTO ticks stay killed. This host never places Coinbase orders.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { LIVE_SIM_NAME, LIVE_SIM_SEO, LIVE_SIM_TZ, liveSimNote, type LiveSimBy, type LiveSimConflict, type LiveSimPublic, type LiveSimStatus } from "./live-sim.ts";
 import { CHECKPOINT_BASELINE_N, CHECKPOINT_BUILD_N, checkpointLabel } from "../launch/checkpoint.ts";
 import { GO_LIVE_DEADLINE } from "./go-live.ts";
 import { stampGoLiveNotice } from "./go-live-notices.ts";
 import { setTapeFrozen, isTapeFrozen } from "./tape-persist.ts";
 import { writePulse } from "./practice-pulse.ts";
-import { dataPath, dataPaths, deskDataPath, deskStoreFiles, parentDir, requireDataFile } from "./data-path.ts";
+import { dataPath, dataPaths, deskDataPath, deskStoreFiles, readDeskFile, requireDataFile, writeDeskFile } from "./data-path.ts";
 
 const PATHS = dataPaths(
   process.env.NODE_TEST_CONTEXT
@@ -162,7 +162,7 @@ function load(): Store {
   }
   for (const p of PATHS) {
     try {
-      const j = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const j = JSON.parse(readDeskFile(p)) as Store;
       if (j && (j.status === "LIVE" || j.status === "PAUSED")) {
         mem = syncCheckpoint({ ...fresh(), ...j, practiceKilled: true });
         return mem;
@@ -180,8 +180,7 @@ function save(s: Store) {
   const body = JSON.stringify(s, null, 2);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }
@@ -191,8 +190,7 @@ function save(s: Store) {
 export function killStrayPractice() {
   try {
     const file = requireDataFile(PRACTICE_KILL);
-    mkdirSync(parentDir(file), { recursive: true });
-    writeFileSync(
+    writeDeskFile(
       file,
       JSON.stringify({ killed: true, at: new Date().toISOString(), note: "Old AUTO 24h practice and extra paper ticks stay off. Admin simulation is the only live-data test cycle." }, null, 2),
     );

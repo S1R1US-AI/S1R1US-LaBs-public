@@ -1,7 +1,6 @@
 /** W0rLd CUP of AI Quant Trading BTC — paper invitational. Never escrow. Never Coinbase create. */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dataPaths, deskStoreFiles, parentDir } from "./data-path.ts";
+import { dataPaths, deskStoreFiles, readDeskFile, writeDeskFile } from "./data-path.ts";
 import { GM_AUTO_ID, GM_AUTO_NAME, SYSTEM_KING_ID, SYSTEM_KING_NAME } from "./board-callout.ts";
 import { stampGoLiveNotice } from "./go-live-notices.ts";
 
@@ -76,7 +75,7 @@ function empty(year: number): Store {
 function load(): Store {
   for (const p of PATHS) {
     try {
-      const j = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const j = JSON.parse(readDeskFile(p)) as Store;
       if (!j || typeof j !== "object") continue;
       return {
         sim: j.sim === "PAUSED" ? "PAUSED" : "LIVE",
@@ -101,8 +100,7 @@ function save(s: Store) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

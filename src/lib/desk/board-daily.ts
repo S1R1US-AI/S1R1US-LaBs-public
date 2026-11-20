@@ -1,7 +1,6 @@
 /** Once-per-ET-day GM B0aRd analysis. Server-only. Frozen until next America/New_York date. */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { deskStorePaths, parentDir } from "./data-path.ts";
+import { deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 
 export const BOARD_DAILY_TOP = 5;
 
@@ -81,7 +80,7 @@ function loadDaily(): BoardDaily | null {
   if (typeof window !== "undefined") return null;
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as BoardDaily;
+      const raw = JSON.parse(readDeskFile(p)) as BoardDaily;
       if (raw?.dayEt && Array.isArray(raw.top5) && typeof raw.summary === "string") return raw;
     } catch {
       /* missing */
@@ -95,8 +94,7 @@ function saveDaily(row: BoardDaily) {
   const body = JSON.stringify(row);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

@@ -1,7 +1,7 @@
 /** Phone-admin lock change tickets. System admin applies. Never execute from app-admin. */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { LockId } from "./lock-status.ts";
 import { LOCK_IDS } from "./lock-status.ts";
+import { deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 
 /** Live-intent rails phone admin may not request-unlock. */
 export const PHONE_REQUEST_BLOCKED: LockId[] = ["bot7Auto", "gmAuto", "gmManual", "agentLive"];
@@ -17,24 +17,25 @@ export type LockTicket = {
   status: "open" | "applied" | "denied";
 };
 
-const PATH = "/tmp/lock-tickets.json";
+const PATHS = deskStorePaths("lock-tickets.json");
 
 function load(): LockTicket[] {
-  try {
-    const raw = JSON.parse(readFileSync(PATH, "utf8")) as LockTicket[];
-    return Array.isArray(raw) ? raw : [];
-  } catch {
-    return [];
+  for (const p of PATHS) {
+    try {
+      const raw = JSON.parse(readDeskFile(p)) as LockTicket[];
+      if (Array.isArray(raw)) return raw;
+    } catch {
+      /* missing */
+    }
   }
+  return [];
 }
 
 function save(rows: LockTicket[]) {
-  try {
-    writeFileSync(PATH, JSON.stringify(rows.slice(-50), null, 2));
-  } catch {
+  const body = JSON.stringify(rows.slice(-50), null, 2);
+  for (const p of PATHS) {
     try {
-      mkdirSync("/tmp", { recursive: true });
-      writeFileSync(PATH, JSON.stringify(rows.slice(-50), null, 2));
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }

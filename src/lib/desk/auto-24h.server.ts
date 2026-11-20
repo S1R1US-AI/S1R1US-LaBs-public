@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
 import { AUTO_RUN_CASH, AUTO_RUN_ID, AUTO_RUN_START_MS, AUTO_RUN_UNTIL_MS } from "./auto-window";
 import type { DeskSnapshot } from "./types";
-import { deskDataFile, requireDataFile } from "./data-path.ts";
+import { deskDataFile, readDeskFile, requireDataFile } from "./data-path.ts";
 
 export type Auto24Book = {
   cashUsd: number;
@@ -48,7 +47,7 @@ function fresh(): Auto24State {
 function load(): Auto24State {
   if (mem && mem.id === AUTO_RUN_ID) return { ...mem, paused: true };
   try {
-    const raw = JSON.parse(readFileSync(requireDataFile(PATH), "utf8")) as Auto24State;
+    const raw = JSON.parse(readDeskFile(requireDataFile(PATH))) as Auto24State;
     mem = { ...raw, paused: true, pausedAt: raw.pausedAt ?? new Date().toISOString() };
     return mem;
   } catch {

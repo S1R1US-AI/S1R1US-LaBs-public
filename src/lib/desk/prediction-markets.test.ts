@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { classifyBtcTitle, parseKalshiMarkets, parsePolyEvent, parseStrikeUsd, predAnalyst } from "./prediction-markets.ts";
-import { hostAllowed } from "./net-guard.ts";
+import { hostAllowed, urlHostIs } from "./net-guard.ts";
 
 describe("BTC prediction markets", () => {
   it("classifies ATH vs monthly vs other", () => {
@@ -43,7 +43,7 @@ describe("BTC prediction markets", () => {
     assert.equal(rows[0]?.kind, "ath");
     assert.equal(rows[0]?.yesPct, 0.7);
     assert.equal(rows[1]?.yesPct, 7.1);
-    assert.match(rows[0]?.url ?? "", /polymarket\.com\/event\/bitcoin-all-time-high-by/);
+    assert.ok((rows[0]?.url ?? "").includes("polymarket.com/event/bitcoin-all-time-high-by"));
   });
 
   it("parses Kalshi monthly highs from last/mid dollars", () => {
@@ -72,7 +72,7 @@ describe("BTC prediction markets", () => {
     assert.equal(rows[0]?.kind, "monthly");
     assert.equal(rows[0]?.strike, "Above $85,000.00");
     assert.equal(rows[0]?.yesPct, 51);
-    assert.match(rows[0]?.url ?? "", /kalshi\.com\/markets\/kxbtcmaxmon/);
+    assert.ok((rows[0]?.url ?? "").includes("kalshi.com/markets/kxbtcmaxmon"));
   });
 
   it("allows Polymarket and Kalshi hosts and wires the wire panel", () => {
@@ -174,5 +174,36 @@ describe("BTC prediction markets", () => {
     const empty = predAnalyst([], 80000);
     assert.equal(empty.stance, "HOLD");
     assert.equal(empty.discount, false);
+  });
+});
+
+describe("URL host compare (dot boundary)", () => {
+  it("matches the exact host and real subdomains", () => {
+    assert.equal(urlHostIs("https://polymarket.com/x", "polymarket.com"), true);
+    assert.equal(urlHostIs("https://gamma-api.polymarket.com/events?x=1", "polymarket.com"), true);
+    assert.equal(urlHostIs("https://API.Elections.KALSHI.com/trade", "kalshi.com"), true);
+    assert.equal(urlHostIs("https://Pro.CoinGecko.com/x", "coingecko.com"), true);
+  });
+
+  it("rejects look-alike hosts and the host outside the hostname", () => {
+    assert.equal(urlHostIs("https://evilpolymarket.com/", "polymarket.com"), false);
+    assert.equal(urlHostIs("https://polymarket.com.evil.com/", "polymarket.com"), false);
+    assert.equal(urlHostIs("https://evil.com/polymarket.com", "polymarket.com"), false);
+    assert.equal(urlHostIs("https://evil.com/?h=polymarket.com", "polymarket.com"), false);
+    assert.equal(urlHostIs("https://evil.com#polymarket.com", "polymarket.com"), false);
+  });
+
+  it("reads the host after any userinfo, so a host name used as the user part never matches", () => {
+    const real = new URL("https://api.coingecko.com/x");
+    real.username = "reader";
+    assert.equal(urlHostIs(real.href, "coingecko.com"), true);
+    const lookalike = new URL("https://evil.com/");
+    lookalike.username = "polymarket.com";
+    assert.equal(urlHostIs(lookalike.href, "polymarket.com"), false);
+  });
+
+  it("never matches an unparseable URL", () => {
+    assert.equal(urlHostIs("polymarket.com", "polymarket.com"), false);
+    assert.equal(urlHostIs("", "polymarket.com"), false);
   });
 });
