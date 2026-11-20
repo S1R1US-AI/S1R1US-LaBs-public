@@ -5,10 +5,10 @@ import { scoreFeeds } from "./feed-audit";
 import { recordDeskFails } from "./error-log";
 import { FILING_CIKS, GOLD_TICKERS, MACRO_QUOTES, MAG7_TICKERS, PROXY_QUOTES, SILVER_TICKERS } from "./proxy-book";
 import { DESK_POLL_MS } from "./poll";
-import { guardedFetch } from "./net-guard";
+import { guardedFetch, urlHostIs } from "./net-guard";
 import { decodeFeedText } from "./html-text";
 import { isTapeFrozen, readLastGood, writeLastGood } from "./tape-persist";
-import { dataPath } from "./data-path.ts";
+import { dataPath, deskStateFile, writeDeskFile } from "./data-path.ts";
 import { fetchPredictionMarkets } from "./prediction-markets";
 import type { AsiaTape, AsiaVenue, BtcHolder, Candle, CapitalTape, DatHolding, DeskSnapshot, EmRegion, EmTape, EmVenue, Filing, Flow, GoldBtcTape, HashRegion, Headline, HoldersTape, LeverageVenue, MacroTape, MetalHolding, Quote, RateSeries, StableYield, StrategyProduct, StrategyTape, WhalePrint } from "./types";
 
@@ -40,6 +40,14 @@ function hostOf(url: string) {
   }
 }
 
+function pathHas(url: string, part: string) {
+  try {
+    return new URL(url).pathname.includes(part);
+  } catch {
+    return url.includes(part);
+  }
+}
+
 function markDead(url: string, ms = 180_000) {
   deadUntil.set(hostOf(url), Date.now() + ms);
 }
@@ -52,15 +60,15 @@ function isDead(url: string) {
 function maxBytesFor(url: string) {
   if (/gamma-api\.polymarket|elections\.kalshi/.test(url)) return 280_000;
   if (/yields\.llama\.fi\/pools/.test(url)) return 12_500_000;
-  if (/coingecko\.com\/api\/v3\/derivatives/.test(url)) return 280_000;
+  if (urlHostIs(url, "coingecko.com") && pathHas(url, "/api/v3/derivatives")) return 280_000;
   if (/book\?level=2|product_book/.test(url)) return 80_000;
-  if (/bitbo\.io|coingecko\.com\/en\/treasuries/.test(url)) return 520_000;
+  if (urlHostIs(url, "bitbo.io") || (urlHostIs(url, "coingecko.com") && pathHas(url, "/en/treasuries"))) return 520_000;
   if (/stlouisfed|fredgraph|sec\.gov\/Archives/.test(url)) return 120_000;
   return 160_000;
 }
 
 function ttlFor(url: string) {
-  if (/polymarket\.com|kalshi\.com/.test(url)) return 60_000;
+  if (urlHostIs(url, "polymarket.com") || urlHostIs(url, "kalshi.com")) return 60_000;
   if (/stlouisfed\.org|fred|bitbo\.io|treasury\.gov|imf\.org|worldgold|bls\.gov/.test(url)) return 180_000;
   if (/llama\.fi/.test(url)) return 300_000;
   if (/coinbase\.com|okx\.com|upbit|bithumb|hashkey|htx|bybit|hyperliquid|bitfinex|alternative\.me|blockstream|blockchain\.info/.test(url))
@@ -2655,15 +2663,11 @@ function logCycle(ev: Record<string, unknown>) {
   if (fails.length) recordDeskFails(fails, new Date().toISOString());
   console.info("[desk-cycle]", JSON.stringify(ev));
   if (typeof window !== "undefined") return;
-  void import("node:fs")
-    .then((fs) => {
-      try {
-        fs.writeFileSync(dataPath("/tmp/desk-cycle.json"), JSON.stringify({ ...ev, stats: cycleStats }, null, 2));
-      } catch {
-        /* preview */
-      }
-    })
-    .catch(() => undefined);
+  try {
+    writeDeskFile(dataPath(deskStateFile("desk-cycle.json")), JSON.stringify({ ...ev, stats: cycleStats }, null, 2));
+  } catch {
+    /* preview */
+  }
 }
 
 const EMPTY_ASIA_RAW = {

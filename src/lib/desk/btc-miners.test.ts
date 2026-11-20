@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync, unlinkSync } from "node:fs";
 import {
   MINER_TIMEFRAMES,
   MINERS_DEFAULT_ADDRESS,
@@ -24,6 +25,8 @@ import {
   withMinerDefaults,
 } from "./btc-miners.ts";
 import { SUPPORT_BTC } from "./support.ts";
+import { dataPath, writeDeskFile } from "./data-path.ts";
+import { loadMinerConfig } from "./btc-miners.server.ts";
 
 describe("BTC M1N3Rz (BTC Miners View)", () => {
   it("ships the S1R1US.ai defaults — the default entry for all systems", () => {
@@ -121,5 +124,36 @@ describe("BTC M1N3Rz (BTC Miners View)", () => {
     );
     assert.match(MINERS_FAQ_ITEMS[1].a, /never stripped/);
     assert.ok(MINERS_FAQ_ITEMS[2].a.includes(MINERS_DEFAULT_ADDRESS));
+  });
+
+  it("re-validates the miner address on load and falls back to the default", () => {
+    const file = dataPath("/tmp/btc-miners-config-test.json");
+    let prev: string | null = null;
+    try {
+      try {
+        prev = readFileSync(file, "utf8");
+      } catch {
+        prev = null;
+      }
+      writeDeskFile(
+        file,
+        JSON.stringify({
+          system: { address: "not-an-address", stratum: "solo.ckpool.org:3333", backup: "solo.ckpool.org:443" },
+        }),
+      );
+      const cfg = loadMinerConfig("system");
+      assert.equal(cfg.address, MINERS_DEFAULT_ADDRESS);
+      assert.equal(minerAddressError(cfg.address), null);
+    } finally {
+      if (prev == null) {
+        try {
+          unlinkSync(file);
+        } catch {
+          /* missing */
+        }
+      } else {
+        writeDeskFile(file, prev);
+      }
+    }
   });
 });

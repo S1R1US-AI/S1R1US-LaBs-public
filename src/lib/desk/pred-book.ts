@@ -1,6 +1,6 @@
 /** PR3D1CT10N$ paper book. Education experiment. Never bets. Never Coinbase create. */
-import { mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
-import { dataPath, dataPaths, deskStoreFiles, deskStorePaths, parentDir } from "./data-path.ts";
+import { unlinkSync } from "node:fs";
+import { dataPaths, deskStoreFiles, deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 import { CHECKPOINT_BUILD_N, checkpointLabel } from "../launch/checkpoint.ts";
 
 export const PRED_PATH = "/pr3d";
@@ -149,7 +149,7 @@ function fresh(): Store {
 
 function readJson(p: string): Store | null {
   try {
-    const j = JSON.parse(readFileSync(p, "utf8")) as Store;
+    const j = JSON.parse(readDeskFile(p)) as Store;
     if (!j || !Array.isArray(j.desks) || !Array.isArray(j.markets)) return null;
     return j;
   } catch {
@@ -188,8 +188,7 @@ function save(s: Store) {
   const body = JSON.stringify(s);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }
@@ -217,7 +216,7 @@ function adminSim(): PredSim {
   if (typeof window !== "undefined") return "LIVE";
   for (const p of liveSimPaths()) {
     try {
-      const j = JSON.parse(readFileSync(p, "utf8")) as { status?: string };
+      const j = JSON.parse(readDeskFile(p)) as { status?: string };
       if (j.status === "PAUSED") return "PAUSED";
       if (j.status === "LIVE") return "LIVE";
     } catch {
@@ -229,12 +228,14 @@ function adminSim(): PredSim {
 
 function tapePx(fallback: number): number {
   if (typeof window !== "undefined") return fallback;
-  try {
-    const j = JSON.parse(readFileSync(dataPath("/tmp/desk-last-good.json"), "utf8")) as { snap?: { btc?: { price?: number | null } } };
-    const px = j?.snap?.btc?.price;
-    if (typeof px === "number" && px > 0) return px;
-  } catch {
-    /* fallback */
+  for (const p of deskStorePaths("desk-last-good.json")) {
+    try {
+      const j = JSON.parse(readDeskFile(p)) as { snap?: { btc?: { price?: number | null } } };
+      const px = j?.snap?.btc?.price;
+      if (typeof px === "number" && px > 0) return px;
+    } catch {
+      /* missing */
+    }
   }
   return fallback;
 }

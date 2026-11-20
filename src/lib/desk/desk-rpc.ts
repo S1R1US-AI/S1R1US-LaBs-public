@@ -78,10 +78,14 @@ export const rebuildDesk = createServerFn({ method: "POST" })
 
 export const fetchDeskErrors = createServerFn({ method: "GET" }).handler(async () => {
   const { listDeskErrors, recordDeskFails } = await import("./error-log");
-  const fs = await import("node:fs");
-  for (const p of ["/tmp/desk-errors.json", "/tmp/desk-cycle.json", `${process.cwd()}/artifacts/desk-cycle.json`]) {
+  const { dataPath, deskStateFile, readDeskFile } = await import("./data-path");
+  for (const p of [
+    dataPath(deskStateFile("desk-errors.json")),
+    dataPath(deskStateFile("desk-cycle.json")),
+    `${process.cwd()}/artifacts/desk-cycle.json`,
+  ]) {
     try {
-      const raw = fs.readFileSync(p, "utf8");
+      const raw = readDeskFile(p);
       const j = JSON.parse(raw) as { rows?: { msg: string; at?: string }[]; stats?: { fails?: string[] } };
       if (Array.isArray(j.rows) && j.rows.length) recordDeskFails(j.rows.map((r) => r.msg), j.rows[0]?.at);
       if (j.stats?.fails?.length) recordDeskFails(j.stats.fails);

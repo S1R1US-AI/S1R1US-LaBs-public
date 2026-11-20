@@ -96,6 +96,21 @@ const HOST_SUFFIXES = [
 
 const BLOCKED_DNS = new Set(["dns.google", "dns.google.com", "8.8.8.8", "8.8.4.4", "google.com"]);
 
+/**
+ * True when the URL's parsed hostname is exactly `host` or a subdomain of it (dot boundary).
+ * An unparseable URL, a look-alike prefix, or the host in the path, query or userinfo never matches.
+ */
+export function urlHostIs(url: string, host: string): boolean {
+  let h: string;
+  try {
+    h = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  const want = host.toLowerCase();
+  return h === want || h.endsWith(`.${want}`);
+}
+
 export function hostAllowed(host: string): boolean {
   const h = host.trim().toLowerCase().replace(/\.$/, "");
   if (!h || BLOCKED_DNS.has(h)) return false;

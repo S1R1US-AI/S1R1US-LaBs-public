@@ -1,8 +1,7 @@
 /** L3AD3R B0ARD paper wagers. Server-only. Never escrow. Never mix with official BTC stack. */
 
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { deskStorePaths } from "./data-path.ts";
+import { deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 import { limitFromEnv } from "./limit-env.ts";
 
 export const WAGER_MIN_USD = 1;
@@ -263,7 +262,7 @@ function round2(n: number) {
 function load(): Store {
   for (const p of PATHS) {
     try {
-      const j = JSON.parse(readFileSync(p, "utf8")) as Store;
+      const j = JSON.parse(readDeskFile(p)) as Store;
       return {
         live: j.live !== false,
         pausedAt: j.pausedAt ?? null,
@@ -292,8 +291,7 @@ function save(s: Store) {
   );
   for (const p of PATHS) {
     try {
-      mkdirSync(p.replace(/\/[^/]+$/, ""), { recursive: true });
-      writeFileSync(p, body + "\n");
+      writeDeskFile(p, body + "\n");
     } catch {
       /* tmp may fail on some hosts */
     }

@@ -127,7 +127,7 @@ export function ProDeskMock() {
               <dd>{snap?.rsi14 != null ? snap.rsi14.toFixed(1) : "—"}</dd>
             </div>
             <div className="pro-metric">
-              <dt>F&G</dt>
+              <dt>{"F&G"}</dt>
               <dd>
                 {snap?.fearGreed?.value ?? "—"} {snap?.fearGreed?.label ?? ""}
               </dd>

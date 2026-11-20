@@ -63,8 +63,8 @@ test("the watched list includes the saved desk files", () => {
   const fake = "/srv/fake-desk-data";
   const paths = sharedPathsFromSource(undefined, fake);
   for (const p of [
-    "/tmp/app-admins.json",
-    "/tmp/board-wager.json",
+    join(tmpdir(), "s1r1us-desk-state", "app-admins.json"),
+    join(tmpdir(), "s1r1us-desk-state", "board-wager.json"),
     `${fake}/board-wager.json`,
     `${fake}/practice-pulse.json`,
     "/tmp/world-cup-test.json",

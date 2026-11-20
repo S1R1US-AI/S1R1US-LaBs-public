@@ -1,7 +1,6 @@
 /** Once-per-ET-day W1S3 0WL$ forum analysis. Server-only. Frozen until next America/New_York date. */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { deskStorePaths, parentDir } from "./data-path.ts";
+import { deskStorePaths, readDeskFile, writeDeskFile } from "./data-path.ts";
 
 type Post = { at: string; name: string; kind: string; body: string };
 
@@ -34,7 +33,7 @@ function loadDaily(): ForumDaily | null {
   if (typeof window !== "undefined") return null;
   for (const p of PATHS) {
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as ForumDaily;
+      const raw = JSON.parse(readDeskFile(p)) as ForumDaily;
       if (raw?.dayEt && typeof raw.summary === "string" && raw.goLive?.pred && raw.goLive?.system) return raw;
     } catch {
       /* missing */
@@ -48,8 +47,7 @@ function saveDaily(row: ForumDaily) {
   const body = JSON.stringify(row);
   for (const p of PATHS) {
     try {
-      mkdirSync(parentDir(p), { recursive: true });
-      writeFileSync(p, body);
+      writeDeskFile(p, body);
     } catch {
       /* preview */
     }
