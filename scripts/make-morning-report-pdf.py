@@ -270,7 +270,7 @@ def main():
     section(pdf, "1. OPEN -- do not green", (255, 64, 64))
     add(
         pdf,
-        "Yahoo Finance 401 -- quote backup is dead. Mag7 / MSTR / rotation go dark if the primary quote path dies. Stooq is blocked on this host. LEAVE RED.",
+        "Yahoo Finance v7 quote returns 401. The live backup is the Yahoo v8 chart; CNBC remains the primary quote path. LEAVE RED only if both quote paths are dead.",
         color=(255, 180, 180),
     )
     fee_live = int(asof.get("feeFast") or 0) > 0

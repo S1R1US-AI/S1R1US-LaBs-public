@@ -61,6 +61,18 @@ export function scoreFeeds(snap: DeskSnapshot): FeedAudit {
         return row(f.id, snap.strategy.products.length > 0, `${snap.strategy.products.length} products`);
       case "holders":
         return row(f.id, snap.holders.holders.length > 0, `${snap.holders.holders.length} holders`);
+      case "fiscal": {
+        const st = snap.freeData?.stamps.find((x) => x.id === "fiscal");
+        const d = snap.freeData?.debt;
+        return row(f.id, Boolean(d) && !st?.stale, d ? `debt ${d.totalUsd.toFixed(0)} as of ${d.asOf}${st?.stale ? " (stale)" : ""}` : st?.note || "missing");
+      }
+      case "cmc": {
+        const st = snap.freeData?.stamps.find((x) => x.id === "cmc");
+        const n = snap.freeData?.cmc.length ?? 0;
+        // No key set is a known optional state, not an outage.
+        if (st?.note === "key not set") return row(f.id, true, "key not set (optional)");
+        return row(f.id, n > 0 && !st?.stale, `${n} quotes${st?.asOf ? ` · ${st.asOf}` : ""}${st?.stale ? " (stale)" : ""}`);
+      }
       case "pred":
         return row(
           f.id,

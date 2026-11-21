@@ -100,6 +100,9 @@ export function BtcHoldersTable({ snap }: { snap: DeskSnapshot | null }) {
         <p className="mt-3 text-xs text-muted">
           Bitbo tracked entities. “How it is held” is the vehicle (ETF, treasury,
           government, wrap) — not a wallet-level audit. Exchange customer coins are custody, not treasury.
+          {snap?.freeData?.strategyLedger
+            ? ` Strategy Bitcoin Ledger backs up the Strategy row (as of ${snap.freeData.strategyLedger.asOf}).`
+            : ""}
         </p>
       </Panel>
 

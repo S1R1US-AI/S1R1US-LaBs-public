@@ -40,14 +40,14 @@ describe("Alignment Score", { concurrency: false }, () => {
     assert.match(morning, /Alignment Score/);
   });
 
-  it("classifies stooq abort as not-core and reports no OPEN problems when rails hold", () => {
-    const c = classifyFail("stooq.com This operation was aborted");
+  it("classifies a Yahoo quote 401 as not-core and reports no OPEN problems when rails hold", () => {
+    const c = classifyFail("query1.finance.yahoo.com 401 Unauthorized");
     assert.equal(c.resolved, true);
     assert.equal(c.attention, false);
     const a = alignmentScore();
     const p = morningProblems({
       snap: { errors: [], pullMs: 900, fetchedAt: new Date().toISOString() } as never,
-      errors: [{ at: new Date().toISOString(), msg: "stooq.com This operation was aborted", resolved: true, attention: false, verdict: c.verdict }],
+      errors: [{ at: new Date().toISOString(), msg: "query1.finance.yahoo.com 401 Unauthorized", resolved: true, attention: false, verdict: c.verdict }],
       alignment: a,
       sim: { status: "LIVE", paused: false, practiceKilled: true },
     });

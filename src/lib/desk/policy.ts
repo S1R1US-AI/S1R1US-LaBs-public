@@ -35,13 +35,15 @@ export const DATA_FEEDS = [
   { id: "em", name: "EM flow", role: "UAE, ME, RU, Africa, LatAm premiums (fill phase)" },
   { id: "fear-greed", name: "Fear & Greed", role: "Alternative.me" },
   { id: "sec", name: "SEC EDGAR", role: "Filings + insiders (fill phase)" },
-  { id: "rss", name: "Headlines", role: "Cointelegraph, CoinDesk, Decrypt, Bitcoin.com, CNBC, Yahoo, Motley Fool, Bitcoin Magazine (fill)" },
-  { id: "capital", name: "Capital tape", role: "Core: SoSoValue ETF net. Fill: DAT/SWF treasuries, CEX notional, Hyperliquid (90s cache, 429 → last good)" },
+  { id: "rss", name: "Headlines", role: "Cointelegraph, CoinDesk, Decrypt, Bitcoin.com, Bitcoin Optech (Atom), CNBC, Yahoo, Motley Fool, Bitcoin Magazine (fill)" },
+  { id: "capital", name: "Capital tape", role: "Bitbo ETF/ETP and DAT/SWF treasuries, CEX notional, Hyperliquid (90s cache, 429 → last good)" },
   { id: "pools", name: "Slow capital", role: "CRE VNQ, 401k/IRA pipe, insurers, endowments, US state SBR, agent OI" },
   { id: "mining", name: "Hashrate", role: "Core: blockchain.info hash/height + mempool pool geography (Foundry/MARA/Luxor/OCEAN/CKPool = North America). Fill: mempool.space/Blockstream fees." },
   { id: "macro", name: "Rates + M2", role: "FRED bills/2s/10s/30s/M2/CPI/PCE · DefiLlama stables (fill, 7s cap)" },
-  { id: "strategy", name: "MSTR stack", role: "MSTR, preferreds, MSTY/2x vehicles from quote tape" },
-  { id: "holders", name: "Top holders", role: "Bitbo BTC treasuries (fill) · quote-derived gold/silver" },
+  { id: "strategy", name: "MSTR stack", role: "MSTR, preferreds, MSTY/2x vehicles from quote tape (CNBC, Yahoo v8 chart fill)" },
+  { id: "holders", name: "Top holders", role: "Bitbo BTC treasuries (fill) · Strategy Bitcoin Ledger backup row · quote-derived gold/silver" },
+  { id: "fiscal", name: "U.S. debt", role: "U.S. Treasury Fiscal Data, Debt to the Penny: total, public, intragovernmental (fill, dated by record_date)" },
+  { id: "cmc", name: "CoinMarketCap", role: "CoinMarketCap Basic quotes BTC/ETH/SOL/HYPE/ZEC with last_updated (fill, 5 min cache, server-side key, display + cross-check only)" },
   { id: "pred", name: "BTC prediction markets", role: "Polymarket + Kalshi public odds: bitcoin all-time high, monthly high, other BTC (fill, display only)" },
 ] as const;
 
@@ -52,10 +54,10 @@ export const CYCLE_ARCH = {
   clientRaceMs: 2800,
   spinnerMs: 3200,
   inflight: 12,
-  core: "Coinbase last first, then RSI/MACD, F&G, on-chain, Asia kimchi, public leverage, ETF flow, whales",
-  fill: "Holders, headlines, filings, BTC prediction markets (Polymarket/Kalshi), EM, FRED/M2, DAT/SWF, Binance LS/OI, mempool.space + Blockstream fees — last good tape reused on 429/timeout",
+  core: "Coinbase last first, then RSI/MACD, F&G, on-chain, Asia kimchi, public leverage, whales",
+  fill: "Holders, headlines, filings, BTC prediction markets (Polymarket/Kalshi), EM, FRED/M2, Treasury debt, Strategy ledger, CoinMarketCap, DAT/SWF, Binance LS/OI, mempool.space + Blockstream fees — last good tape reused on 429/timeout",
   skip: "None cut. Slow or geo-blocked hosts run on fill with 1.4s caps and last-good cache (Binance fapi → CoinGecko; mempool.space fees; Blockstream fees).",
 } as const;
 
 /** Bump on the weekly whole-desk free-source hunt. */
-export const SYSTEM_REVIEWED = "2026-09-05";
+export const SYSTEM_REVIEWED = "2026-11-20";

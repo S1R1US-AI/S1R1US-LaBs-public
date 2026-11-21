@@ -282,6 +282,16 @@ export function MacroTape({ snap }: { snap: DeskSnapshot | null }) {
         <p className="mt-2 text-xs text-muted">
           Daily constant-maturity yields. T-bill 3m yellow · 2y purple · 10y red · 30y blue.
         </p>
+        {snap?.freeData?.debt ? (
+          <div className="mt-3">
+            <Metric
+              label="U.S. debt (total public)"
+              value={`$${(snap.freeData.debt.totalUsd / 1e12).toFixed(2)}T`}
+              hint={`${snap.freeData.debt.asOf} · Source: U.S. Treasury Fiscal Data, Debt to the Penny`}
+              tone="text-y30"
+            />
+          </div>
+        ) : null}
       </Panel>
 
       <div className="grid gap-4">
