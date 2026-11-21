@@ -10,6 +10,29 @@ import { decodeFeedText } from "./html-text";
 import { isTapeFrozen, readLastGood, writeLastGood } from "./tape-persist";
 import { dataPath, deskStateFile, writeDeskFile } from "./data-path.ts";
 import { fetchPredictionMarkets } from "./prediction-markets";
+import {
+  ATTRIBUTION,
+  CMC_CACHE_MS,
+  CMC_HEADER,
+  CMC_KEY_ENV,
+  CMC_PAGE,
+  CMC_QUOTES_URL,
+  CMC_SYMBOLS,
+  FISCAL_DEBT_PAGE,
+  FISCAL_DEBT_URL,
+  MAX_AGE_MS,
+  OPTECH_FEED_URL,
+  STRATEGY_LEDGER_URL,
+  gapPct,
+  parseAtom,
+  parseCmcQuotes,
+  parseStrategyLedger,
+  parseTreasuryDebt,
+  parseYahooChartQuote,
+  stampOf,
+  withStrategyBackup,
+} from "./free-sources";
+import type { FreeDataTape, FreeSourceStamp } from "./types";
 import type { AsiaTape, AsiaVenue, BtcHolder, Candle, CapitalTape, DatHolding, DeskSnapshot, EmRegion, EmTape, EmVenue, Filing, Flow, GoldBtcTape, HashRegion, Headline, HoldersTape, LeverageVenue, MacroTape, MetalHolding, Quote, RateSeries, StableYield, StrategyProduct, StrategyTape, WhalePrint } from "./types";
 
 /* SEC EDGAR asks for a contact in the User-Agent; it comes from a setting, never from code. */
@@ -64,10 +87,13 @@ function maxBytesFor(url: string) {
   if (/book\?level=2|product_book/.test(url)) return 80_000;
   if (urlHostIs(url, "bitbo.io") || (urlHostIs(url, "coingecko.com") && pathHas(url, "/en/treasuries"))) return 520_000;
   if (/stlouisfed|fredgraph|sec\.gov\/Archives/.test(url)) return 120_000;
+  if (urlHostIs(url, "strategy.com") && pathHas(url, "/ledger")) return 250_000;
   return 160_000;
 }
 
 function ttlFor(url: string) {
+  if (["api.fiscaldata.treasury.gov", "strategy.com", "bitcoinops.org"].some((h) => urlHostIs(url, h))) return 30 * 60_000;
+  if (urlHostIs(url, "pro-api.coinmarketcap.com")) return CMC_CACHE_MS;
   if (urlHostIs(url, "polymarket.com") || urlHostIs(url, "kalshi.com")) return 60_000;
   if (/stlouisfed\.org|fred|bitbo\.io|treasury\.gov|imf\.org|worldgold|bls\.gov/.test(url)) return 180_000;
   if (/llama\.fi/.test(url)) return 300_000;
@@ -1265,14 +1291,7 @@ async function bitboTreasuriesHtml(): Promise<string> {
 }
 
 async function capitalTape(): Promise<CapitalTape> {
-  const [etfR, datR, swfR, cbR, okxR, krR, byR, hlR] = await Promise.allSettled([
-    postJson<{
-      data?: { date: string; totalNetInflow: number; totalNetAssets?: number }[];
-    }>(
-      "https://api.sosovalue.xyz/openapi/v2/etf/historicalInflowChart",
-      { type: "us-btc-spot" },
-      2200,
-    ),
+  const [datR, swfR, cbR, okxR, krR, byR, hlR] = await Promise.allSettled([
     bitboTreasuriesHtml(),
     getText("https://bitbo.io/treasuries/countries/", 3500),
     getJson<{ last?: string; volume?: string }>("https://api.exchange.coinbase.com/products/BTC-USD/stats", 2000),
@@ -1291,32 +1310,16 @@ async function capitalTape(): Promise<CapitalTape> {
     hyperliquidBtcNotional(),
   ]);
 
-  let etfFlow: number | null = null;
-  let etfAum: number | null = null;
-  let asOf: string | null = null;
-  if (etfR.status === "fulfilled") {
-    const row = etfR.value.data?.[0];
-    if (row && Number.isFinite(row.totalNetInflow)) {
-      etfFlow = row.totalNetInflow;
-      asOf = row.date;
-    }
-    const aum = row?.totalNetAssets;
-    if (typeof aum === "number" && Number.isFinite(aum)) etfAum = aum;
-  }
-
+  const asOf: string | null = null;
   const datHtml = datR.status === "fulfilled" ? datR.value : "";
   const dats = parsePublicDats(datHtml);
   const etfs = parseEtfs(datHtml);
   const datUsd = dats.length ? dats.reduce((s, d) => s + d.usd, 0) : null;
   const datBtc = dats.reduce((s, d) => s + d.btc, 0);
   const named = dats.slice(0, 4).map((d) => `${d.ticker || d.name} ${d.btc.toLocaleString("en-US", { maximumFractionDigits: 0 })}`);
-  const etfUsd = etfs.length ? etfs.reduce((s, d) => s + d.usd, 0) : etfAum;
+  const etfUsd = etfs.length ? etfs.reduce((s, d) => s + d.usd, 0) : null;
   const etfBtc = etfs.reduce((s, d) => s + d.btc, 0);
   const etfNamed = etfs.slice(0, 4).map((d) => `${d.ticker || d.name} ${d.btc.toLocaleString("en-US", { maximumFractionDigits: 0 })}`);
-  const etfFlowNote =
-    etfFlow != null
-      ? `US last session net ${etfFlow >= 0 ? "+" : ""}$${(Math.abs(etfFlow) / 1e6).toFixed(0)}M`
-      : "US session net n/a";
 
   let coinbaseUsd: number | null = null;
   let spot: number | null = null;
@@ -1452,17 +1455,15 @@ async function capitalTape(): Promise<CapitalTape> {
 
   return {
     asOf,
-    source: "Bitbo ETFs + public DATs · SoSoValue US flow · Bitbo countries · Mubadala 13F · public CEX · Hyperliquid",
+    source: "Bitbo ETFs + public DATs · Bitbo countries · Mubadala 13F · public CEX · Hyperliquid",
     bars: [
       {
         id: "etf",
         name: "ETF",
         usd: etfUsd,
         note: etfs.length
-          ? `${etfs.length} ETF/ETP, ${etfBtc.toLocaleString("en-US", { maximumFractionDigits: 0 })} BTC · ${etfNamed.join(" · ")} · ${etfFlowNote}`
-          : etfAum != null
-            ? `US spot AUM · ${etfFlowNote}`
-            : "ETF holdings unavailable",
+          ? `${etfs.length} ETF/ETP, ${etfBtc.toLocaleString("en-US", { maximumFractionDigits: 0 })} BTC · ${etfNamed.join(" · ")}`
+          : "ETF holdings unavailable",
       },
       {
         id: "dat",
@@ -1507,7 +1508,7 @@ async function capitalTape(): Promise<CapitalTape> {
     ],
     dats,
     etfs,
-    etfFlow,
+    etfFlow: null,
   };
 }
 
@@ -1563,48 +1564,20 @@ async function quotes(): Promise<Quote[]> {
     }));
   const have = new Set(out.map((q) => q.symbol.toUpperCase()));
   const missing = symbols.filter((s) => !have.has(s));
-  if (missing.length && missing.length <= 8 && !isDead("https://query1.finance.yahoo.com/")) {
-    try {
-      const y = await getJson<{
-        quoteResponse?: {
-          result?: { symbol?: string; shortName?: string; regularMarketPrice?: number; regularMarketChangePercent?: number }[];
-        };
-      }>(
-        `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${missing.slice(0, 8).join(",")}`,
-        2000,
-        { "User-Agent": "Mozilla/5.0 S1R1US-Lab/1.0" },
-      );
-      for (const r of y.quoteResponse?.result ?? []) {
-        if (!r.symbol || r.regularMarketPrice == null) continue;
-        out.push({
-          symbol: r.symbol,
-          name: r.shortName ?? r.symbol,
-          last: r.regularMarketPrice,
-          changePct: r.regularMarketChangePercent ?? null,
-        });
-      }
-    } catch {
-      /* CNBC row is enough */
-    }
-  }
-  const still = symbols.filter((s) => !out.some((q) => q.symbol.toUpperCase() === s.toUpperCase()));
-  if (still.length) {
-    const us = still.filter((s) => !/[=^-]/.test(s)).slice(0, 8);
-    await Promise.all(
-      us.map(async (sym) => {
-        try {
-          const csv = await getText(`https://stooq.com/q/l/?s=${encodeURIComponent(sym.toLowerCase())}.us&f=sd2t2ohlcv&h&e=csv`, 1600);
-          const line = csv.trim().split("\n")[1];
-          if (!line || /N\/D/.test(line)) return;
-          const cols = line.split(",");
-          const close = Number(cols[6]);
-          if (!Number.isFinite(close) || close <= 0) return;
-          out.push({ symbol: sym, name: sym, last: close, changePct: null });
-        } catch {
-          /* optional quote fill */
-        }
-      }),
+  // Yahoo v7 quotes now return 401; the v8 chart call on the same host family still works.
+  if (missing.length && missing.length <= 8 && !isDead("https://query2.finance.yahoo.com/")) {
+    const got = await Promise.allSettled(
+      missing.slice(0, 8).map((sym) =>
+        getJson<unknown>(
+          `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=5d&interval=1d`,
+          2000,
+          { "User-Agent": "Mozilla/5.0 S1R1US-Lab/1.0" },
+        ).then((j) => parseYahooChartQuote(j, sym)),
+      ),
     );
+    for (const r of got) {
+      if (r.status === "fulfilled" && r.value) out.push(r.value);
+    }
   }
   return out;
 }
@@ -1648,12 +1621,15 @@ async function headlines(): Promise<Headline[]> {
     getText("https://www.coindesk.com/arc/outboundfeeds/rss/", 2200),
     getText("https://decrypt.co/feed", 2200),
     getText("https://news.bitcoin.com/feed/", 2200),
+    getText(OPTECH_FEED_URL, 2200),
   ]);
-  const names = ["Cointelegraph", "CoinDesk", "Decrypt", "Bitcoin.com"] as const;
-  const caps = [5, 4, 3, 3];
+  const names = ["Cointelegraph", "CoinDesk", "Decrypt", "Bitcoin.com", "Bitcoin Optech"] as const;
+  const caps = [5, 4, 3, 3, 2];
   const out: Headline[] = [];
   feeds.forEach((r, i) => {
-    if (r.status === "fulfilled") out.push(...parseRss(r.value, names[i]!, caps[i]));
+    if (r.status !== "fulfilled") return;
+    // Optech publishes Atom (<entry>), the others RSS (<item>).
+    out.push(...(names[i] === "Bitcoin Optech" ? parseAtom(r.value, names[i]!, decode, caps[i]) : parseRss(r.value, names[i]!, caps[i])));
   });
   const seen = new Set<string>();
   return out.filter((h) => {
@@ -1846,18 +1822,16 @@ type FxEr = { rates?: Record<string, number> };
 type OasisTick = { ticker?: { last_price?: string; daily_percentage_change?: string } };
 type Rapira = { data?: { symbol?: string; close?: number }[] };
 type LunoTick = { last_trade?: string; rolling_24_hour_volume?: string };
-type MbTick = { last?: string; vol?: string }[];
 type BudaTick = { ticker?: { last_price?: [string, string]; volume?: [string, string] } };
 
 async function emRaw() {
-  const [fxR, oasisR, rapR, lunoZarR, lunoNgnR, mbR, budaClpR, budaCopR, sarR, tryR, ngnR, zarR, arsR] =
+  const [fxR, oasisR, rapR, lunoZarR, lunoNgnR, budaClpR, budaCopR, sarR, tryR, ngnR, zarR, arsR] =
     await Promise.allSettled([
       getJson<FxEr>("https://open.er-api.com/v6/latest/USD"),
       getJson<OasisTick>("https://api.bitoasis.net/v1/exchange/ticker/BTC-AED"),
       getJson<Rapira>("https://api.rapira.net/open/market/rates"),
       getJson<LunoTick>("https://api.luno.com/api/1/ticker?pair=XBTZAR"),
       getJson<LunoTick>("https://api.luno.com/api/1/ticker?pair=XBTNGN"),
-      getJson<MbTick>("https://api.mercadobitcoin.net/api/v4/tickers?symbols=BTC-BRL"),
       getJson<BudaTick>("https://www.buda.com/api/v2/markets/btc-clp/ticker"),
       getJson<BudaTick>("https://www.buda.com/api/v2/markets/btc-cop/ticker"),
       okxUsdtP2p("SAR"),
@@ -1884,7 +1858,6 @@ async function emRaw() {
     usdtRub: num(usdtRub),
     lunoZar: lunoZarR.status === "fulfilled" ? num(lunoZarR.value.last_trade) : null,
     lunoNgn: lunoNgnR.status === "fulfilled" ? num(lunoNgnR.value.last_trade) : null,
-    mbBrl: mbR.status === "fulfilled" ? num(mbR.value[0]?.last) : null,
     budaClp: budaClpR.status === "fulfilled" ? num(budaClpR.value.ticker?.last_price?.[0]) : null,
     budaCop: budaCopR.status === "fulfilled" ? num(budaCopR.value.ticker?.last_price?.[0]) : null,
     p2pSar: sarR.status === "fulfilled" ? sarR.value : null,
@@ -1920,7 +1893,6 @@ function toEm(raw: Awaited<ReturnType<typeof emRaw>>, refUsd: number | null): Em
   const oasisUsd = raw.oasisAed != null && raw.aed ? raw.oasisAed / raw.aed : null;
   const lunoZarUsd = raw.lunoZar != null && raw.zar ? raw.lunoZar / raw.zar : null;
   const lunoNgnUsd = raw.lunoNgn != null && raw.ngn ? raw.lunoNgn / raw.ngn : null;
-  const mbUsd = raw.mbBrl != null && raw.brl ? raw.mbBrl / raw.brl : null;
   const clpUsd = raw.budaClp != null && raw.clp ? raw.budaClp / raw.clp : null;
   const copUsd = raw.budaCop != null && raw.cop ? raw.budaCop / raw.cop : null;
   const regions = [
@@ -1941,7 +1913,6 @@ function toEm(raw: Awaited<ReturnType<typeof emRaw>>, refUsd: number | null): Em
       venue("zar-p2p", "AF", "OKX P2P USDT/ZAR", "p2p", null, prem(raw.p2pZar, raw.zar)),
     ]),
     packRegion("SA", "South America", [
-      venue("mb", "SA", "Mercado BTC-BRL", "spot", mbUsd, prem(mbUsd, refUsd)),
       venue("buda-clp", "SA", "Buda CLP", "spot", clpUsd, prem(clpUsd, refUsd)),
       venue("buda-cop", "SA", "Buda COP", "spot", copUsd, prem(copUsd, refUsd)),
       venue("ars-p2p", "SA", "OKX P2P USDT/ARS", "p2p", null, prem(raw.p2pArs, raw.ars)),
@@ -2636,26 +2607,14 @@ function capLane<T>(p: Promise<T>, ms = 2_000): Promise<T> {
 
 async function etfFlowOnly(): Promise<CapitalTape> {
   const prev = snapCache?.value?.capital;
-  const empty: CapitalTape = {
+  return {
     asOf: null,
-    source: "SoSoValue US flow",
+    source: prev?.source ?? "Bitbo ETFs + public DATs",
     bars: prev?.bars ?? [],
     dats: prev?.dats ?? [],
     etfs: prev?.etfs ?? [],
-    etfFlow: prev?.etfFlow ?? null,
+    etfFlow: null,
   };
-  try {
-    const j = await postJson<{
-      data?: { date: string; totalNetInflow: number; totalNetAssets?: number }[];
-    }>("https://api.sosovalue.xyz/openapi/v2/etf/historicalInflowChart", { type: "us-btc-spot" }, 2000);
-    const row = j.data?.[0];
-    if (row && Number.isFinite(row.totalNetInflow)) {
-      return { ...empty, asOf: row.date ?? empty.asOf, etfFlow: row.totalNetInflow };
-    }
-  } catch {
-    /* keep previous */
-  }
-  return empty;
 }
 
 function logCycle(ev: Record<string, unknown>) {
@@ -2704,7 +2663,6 @@ const EMPTY_EM_RAW = {
   usdtRub: null as number | null,
   lunoZar: null as number | null,
   lunoNgn: null as number | null,
-  mbBrl: null as number | null,
   budaClp: null as number | null,
   budaCop: null as number | null,
   p2pSar: null as number | null,
@@ -2791,7 +2749,7 @@ function stitchCore(
   const quoteRows = settled("cnbc", errors, qR, prev?.quotes ?? []);
   const cap = settled("capital", errors, capR, prev?.capital ?? {
     asOf: null,
-    source: "SoSoValue US flow",
+    source: "Bitbo ETFs + public DATs",
     bars: [],
     dats: [],
     etfs: [],
@@ -2879,6 +2837,7 @@ function stitchCore(
       btcRegions: BTC_REGIONS,
     },
     feedAudit: { at: "", pullMs: 0, ok: 0, fail: 0, rows: [] },
+    freeData: prev?.freeData,
   };
   snapshot.strategy = snapshot.strategy.products.length ? snapshot.strategy : prev?.strategy ?? snapshot.strategy;
   if (snapshot.btc.price != null) {
@@ -2886,6 +2845,57 @@ function stitchCore(
   }
   snapshot.feedAudit = scoreFeeds(snapshot);
   return snapshot;
+}
+
+let cmcCache: { t: number; v: FreeDataTape["cmc"] } | null = null;
+
+/** CoinMarketCap Basic. Server only: the key is read on the server and never leaves this process. */
+async function cmcQuotes(): Promise<{ rows: FreeDataTape["cmc"]; note: string }> {
+  const key = (process.env[CMC_KEY_ENV] ?? "").trim();
+  if (!key) return { rows: cmcCache?.v ?? [], note: "key not set" };
+  if (cmcCache && Date.now() - cmcCache.t < CMC_CACHE_MS) return { rows: cmcCache.v, note: "" };
+  const j = await getJson<unknown>(`${CMC_QUOTES_URL}?symbol=${CMC_SYMBOLS.join(",")}`, 2500, { [CMC_HEADER]: key });
+  const rows = parseCmcQuotes(j);
+  if (!rows.length) throw new Error("empty cmc");
+  cmcCache = { t: Date.now(), v: rows };
+  return { rows, note: "" };
+}
+
+function failNote(r: PromiseSettledResult<unknown>): string {
+  if (r.status === "fulfilled") return "";
+  const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+  return msg.replace(/[^\w .:/-]/g, "").slice(0, 60);
+}
+
+/** Free sources (Treasury debt, Strategy ledger, CoinMarketCap). Fail soft, keep last good. */
+async function freeDataTape(btcPrice: number | null, prev: FreeDataTape | undefined): Promise<FreeDataTape> {
+  const [debtR, ledR, cmcR] = await Promise.allSettled([
+    getJson<unknown>(FISCAL_DEBT_URL, 2500).then(parseTreasuryDebt),
+    // Strategy's edge rejects the .local contact in the shared UA; same honest product name, no contact.
+    getText(STRATEGY_LEDGER_URL, 2500, { Accept: "text/html", "User-Agent": "S1R1US-Lab/1.0 (bitcoin accumulator research)" }).then(parseStrategyLedger),
+    cmcQuotes(),
+  ]);
+  const now = Date.now();
+  const debt = (debtR.status === "fulfilled" ? debtR.value : null) ?? prev?.debt ?? null;
+  const strategyLedger = (ledR.status === "fulfilled" ? ledR.value : null) ?? prev?.strategyLedger ?? null;
+  const cmcGot = cmcR.status === "fulfilled" ? cmcR.value : null;
+  const cmc = cmcGot?.rows.length ? cmcGot.rows : prev?.cmc ?? [];
+  const cmcBtc = cmc.find((q) => q.symbol === "BTC");
+  const stamps: FreeSourceStamp[] = [
+    stampOf("fiscal", ATTRIBUTION.fiscal, FISCAL_DEBT_PAGE, debt?.asOf ?? null, now, MAX_AGE_MS.fiscal,
+      debtR.status === "fulfilled" && debtR.value != null, failNote(debtR)),
+    stampOf("strategy", ATTRIBUTION.strategy, STRATEGY_LEDGER_URL, strategyLedger?.asOf ?? null, now, MAX_AGE_MS.strategy,
+      ledR.status === "fulfilled" && ledR.value != null, failNote(ledR)),
+    stampOf("cmc", ATTRIBUTION.cmc, CMC_PAGE, cmcBtc?.lastUpdated ?? null, now, MAX_AGE_MS.cmc,
+      Boolean(cmcGot?.rows.length) && !cmcGot?.note, cmcGot?.note || failNote(cmcR)),
+  ];
+  return { debt, strategyLedger, cmc, cmcBtcGapPct: gapPct(cmcBtc?.price, btcPrice), stamps };
+}
+
+/** Optech stamp comes from the headlines list (newest Optech entry date). */
+function optechStamp(heads: Headline[], now: number): FreeSourceStamp {
+  const h = heads.find((x) => x.source === "Bitcoin Optech");
+  return stampOf("optech", ATTRIBUTION.optech, "https://bitcoinops.org/en/newsletters/", h?.published ?? null, now, 10 * 86_400_000, Boolean(h));
 }
 
 async function buildSnapshot(): Promise<DeskSnapshot> {
@@ -2959,6 +2969,8 @@ async function assembleFill(t0: number, core: DeskSnapshot) {
       capLane(strategySparks(), 7000),
       capLane(fetchPredictionMarkets(), 4500),
     ]);
+    // Free sources run after the main fill batch so they never lose the slot race to it (display only).
+    const [freeR] = await Promise.allSettled([capLane(freeDataTape(core.btc.price, core.freeData), 4000)]);
     const silent: string[] = [];
     const capital = settled("capital", silent, capR, core.capital);
     const holders = settled("holders", silent, hoR, core.holders);
@@ -2966,6 +2978,7 @@ async function assembleFill(t0: number, core: DeskSnapshot) {
     const whalesV = settled("whales", silent, whR, core.whales);
     const filingsV = settled("sec", silent, fR, core.filings);
     const predV = settled("pred", silent, predR, core.predictionMarkets);
+    const freeV = freeR.status === "fulfilled" ? freeR.value : core.freeData;
     const em = toEm(settled("em", silent, eR, EMPTY_EM_RAW), core.btc.price);
     const macro = settled("macro", silent, macR, core.macro);
     const asia = toAsia(settled("asia", silent, aR, EMPTY_ASIA_RAW), core.btc.price);
@@ -3033,6 +3046,14 @@ async function assembleFill(t0: number, core: DeskSnapshot) {
       asia: asia.kimchiPct != null ? asia : core.asia,
       macro: macro.tbill.last != null || macro.m2.last != null ? macro : core.macro,
     };
+    if (freeV) {
+      const now = Date.now();
+      next.holders = { ...next.holders, holders: withStrategyBackup(next.holders.holders, freeV.strategyLedger, now) };
+      next.freeData = {
+        ...freeV,
+        stamps: [...freeV.stamps.filter((x) => x.id !== "optech"), optechStamp(next.headlines, now)],
+      };
+    }
     next.feedAudit = scoreFeeds(next);
     snapCache = { at: Date.now(), value: next };
     writeLastGood(next);

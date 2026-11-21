@@ -150,7 +150,7 @@ export function EmFlowPanel({ snap }: { snap: DeskSnapshot | null }) {
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-xs text-muted">INFLOW = local BTC or USDT trading rich vs USD (demand / capital into bitcoin). OUTFLOW = trading cheap (selling). Spot: BitOasis AED, Luno ZAR/NGN, Mercado BRL, Buda CLP/COP vs Coinbase. P2P: OKX USDT vs open.er-api FX; Russia is Rapira USDT/RUB. Threshold \u00b11.5%. Binance is not used.</p>
+      <p className="mt-3 text-xs text-muted">INFLOW = local BTC or USDT trading rich vs USD (demand / capital into bitcoin). OUTFLOW = trading cheap (selling). Spot: BitOasis AED, Luno ZAR/NGN, Buda CLP/COP vs Coinbase. P2P: OKX USDT vs open.er-api FX; Russia is Rapira USDT/RUB. Threshold \u00b11.5%. Binance is not used.</p>
     </Panel>
   );
 }

@@ -14,6 +14,9 @@ export type Quote = {
   name: string;
   last: number | null;
   changePct: number | null;
+  /** Source timestamp of `last` (ISO), when the source gives one. */
+  at?: string | null;
+  source?: string;
 };
 
 export type Filing = {
@@ -270,6 +273,36 @@ export type LeverageVenue = {
   liqShortUsd: number | null;
 };
 
+/** One free source's own timestamp and health (2026-11-20 free-source hunt). */
+export type FreeSourceStamp = {
+  id: "fiscal" | "strategy" | "optech" | "cmc";
+  source: string;
+  sourceUrl: string;
+  /** The source's own date or time for this reading (not our fetch time). */
+  asOf: string | null;
+  ok: boolean;
+  /** True when not ok, or asOf is older than that source's max age. */
+  stale: boolean;
+  note: string;
+};
+
+export type FreeDataTape = {
+  debt: { totalUsd: number; publicUsd: number | null; intragovUsd: number | null; asOf: string } | null;
+  strategyLedger: {
+    btc: number;
+    avgCostUsd: number | null;
+    totalCostUsdM: number | null;
+    lastBuyBtc: number | null;
+    lastBuyPriceUsd: number | null;
+    asOf: string;
+  } | null;
+  /** CoinMarketCap Basic quotes. Display and cross-check only, never marks or fills. */
+  cmc: { symbol: string; price: number; changePct24h: number | null; lastUpdated: string }[];
+  /** CoinMarketCap BTC vs desk BTC price, percent. Display only. */
+  cmcBtcGapPct: number | null;
+  stamps: FreeSourceStamp[];
+};
+
 export type DeskSnapshot = {
   fetchedAt: string;
   pullMs: number;
@@ -334,6 +367,8 @@ export type DeskSnapshot = {
   strategy: StrategyTape;
   goldBtc: GoldBtcTape;
   holders: HoldersTape;
+  /** Free sources (Treasury, Strategy ledger, Optech, CoinMarketCap). Absent on older snapshots. */
+  freeData?: FreeDataTape;
 };
 
 export type AsiaVenue = {

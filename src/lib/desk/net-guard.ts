@@ -46,7 +46,6 @@ const HOST_SUFFIXES = [
   "blockstream.info",
   "mempool.space",
   "mempool.emzy.de",
-  "sosovalue.xyz",
   "bitbo.io",
   "coingecko.com",
   "sec.gov",
@@ -71,10 +70,8 @@ const HOST_SUFFIXES = [
   "bitoasis.net",
   "rapira.net",
   "luno.com",
-  "mercadobitcoin.net",
   "buda.com",
   "stlouisfed.org",
-  "stooq.com",
   "frankfurter.app",
   "frankfurter.dev",
   "llama.fi",
@@ -92,6 +89,11 @@ const HOST_SUFFIXES = [
   "twitter.com",
   "polymarket.com",
   "kalshi.com",
+  // Free sources approved 2026-11-20 (system admin).
+  "api.fiscaldata.treasury.gov",
+  "pro-api.coinmarketcap.com",
+  "bitcoinops.org",
+  "strategy.com",
 ] as const;
 
 const BLOCKED_DNS = new Set(["dns.google", "dns.google.com", "8.8.8.8", "8.8.4.4", "google.com"]);
@@ -140,7 +142,15 @@ export async function guardedFetch(raw: string, init?: RequestInit): Promise<Res
   const loc = res.headers.get("location");
   if (!loc) return res;
   const next = assertOutbound(new URL(loc, first).toString());
-  return fetch(next.toString(), { ...init, redirect: "error" });
+  // A different host must not inherit caller headers (API keys, cookies, Authorization).
+  const hop = next.hostname.toLowerCase() === first.hostname.toLowerCase() ? init : stripCallerHeaders(init);
+  return fetch(next.toString(), { ...hop, redirect: "error" });
+}
+
+function stripCallerHeaders(init?: RequestInit): RequestInit | undefined {
+  if (!init) return init;
+  const { headers: _headers, ...rest } = init;
+  return rest;
 }
 
 export type DohAnswer = { Status?: number; Answer?: { data?: string; type?: number }[] };

@@ -148,16 +148,11 @@ export function CapitalTapeChart({ snap }: { snap: DeskSnapshot | null }) {
       <StackTable title="Public DAT stack" rows={snap?.capital.dats ?? []} />
       <p className="mt-3 text-xs text-muted">
         ETF bar is Bitbo global ETF/ETP holdings (IBIT, FBTC, GBTC, and the rest), not last-session
-        flow. SoSoValue US net is in the ETF note
-        {snap?.capital.etfFlow != null
-          ? ` (${snap.capital.etfFlow >= 0 ? "+" : ""}${compactUsd(snap.capital.etfFlow)})`
-          : ""}
-        . DAT is Bitbo public-company holdings. El Salv is El Salvador’s reserve. LatAm is all Latin
+        flow. DAT is Bitbo public-company holdings. El Salv is El Salvador’s reserve. LatAm is all Latin
         American official BTC (El Salvador + Venezuela and any other free prints). Sovereign is Bhutan
         + UAE (not seized US/CN/UK).
         Axis is log so El Salvador is readable next to ETF/DAT. Bar fill is ice → navy by size.
         Coinbase and other CEX are 24h spot notional. Hyperliquid is BTC perp 24h notional.
-        {snap?.capital.asOf ? ` US ETF flow as of ${snap.capital.asOf}.` : ""}
       </p>
     </Panel>
   );

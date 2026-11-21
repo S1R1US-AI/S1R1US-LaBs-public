@@ -29,7 +29,7 @@ Only paid dependency: SuperGrok / xAI. Coinbase is used as a venue, not a data v
 
 6. Coordinator — synthesizes 1–5. HIGH CONVICTION requires two specialist bots to agree. The coordinator does not grade itself.
 
-7. S1R1U$ Analyst — sees 1–6 live, plus BTC: Coinbase price/volume/RSI, OKX long/short + OI + funding, Coinbase L2 heatmap, on-chain height/hashrate, Fear & Greed, Asia tape (Upbit/Bithumb kimchi, HashKey HK, HTX, OKX CNY OTC), and EM flow tape (UAE BitOasis, Middle East P2P, Russia Rapira, Africa Luno, South America Mercado/Buda). Binance is not used. Issues ACCUMULATE / BUY / HOLD / WAIT / TRIM. Grades the coordinator.
+7. S1R1U$ Analyst — sees 1–6 live, plus BTC: Coinbase price/volume/RSI, OKX long/short + OI + funding, Coinbase L2 heatmap, on-chain height/hashrate, Fear & Greed, Asia tape (Upbit/Bithumb kimchi, HashKey HK, HTX, OKX CNY OTC), and EM flow tape (UAE BitOasis, Middle East P2P, Russia Rapira, Africa Luno, South America Buda). Binance is not used. Issues ACCUMULATE / BUY / HOLD / WAIT / TRIM. Grades the coordinator.
 
 
 ## 3. Free source map (no Bloomberg, no CoinGlass API key)
@@ -42,7 +42,7 @@ Long/short ratio, open interest, funding: OKX public swap API. CoinGlass heatmap
 
 Asia tape (Binance is geo-blocked from this host): Upbit + Bithumb KRW (kimchi premium vs Coinbase), HashKey Hong Kong (SFC book), OKX USDT (Asia/HK volume), HTX USDT (China-adjacent offshore), OKX P2P USDT/CNY (onshore China OTC proxy). FX: Frankfurter USD→KRW/HKD/CNY.
 
-EM flow tape (UAE / Middle East / Russia / Africa / South America): BitOasis BTC-AED; OKX P2P USDT/SAR and USDT/TRY; Rapira USDT/RUB; Luno XBTZAR and XBTNGN plus OKX P2P NGN/ZAR; Mercado Bitcoin BTC-BRL, Buda CLP/COP, OKX P2P USDT/ARS. FX: open.er-api.com. INFLOW = local rich vs USD (≥+1.5%). OUTFLOW = cheap (≤−1.5%).
+EM flow tape (UAE / Middle East / Russia / Africa / South America): BitOasis BTC-AED; OKX P2P USDT/SAR and USDT/TRY; Rapira USDT/RUB; Luno XBTZAR and XBTNGN plus OKX P2P NGN/ZAR; Buda CLP/COP, OKX P2P USDT/ARS. FX: open.er-api.com. INFLOW = local rich vs USD (≥+1.5%). OUTFLOW = cheap (≤−1.5%).
 
 Fear & Greed: Alternative.me (free JSON).
 
@@ -51,6 +51,8 @@ On-chain: Blockstream tip height, blockchain.info hashrate.
 Equities / macro: CNBC public quote service. Yahoo Finance v8 as fallback.
 
 News: Cointelegraph, CoinDesk, Decrypt, Bitcoin.com RSS.
+
+Free sources (added 2026-11-20, fill phase, dated by each source and marked stale past its window): U.S. Treasury Fiscal Data, Debt to the Penny. Strategy Bitcoin Ledger (backup for the Strategy holders row). Bitcoin Optech (Atom news feed). CoinMarketCap Basic quotes, display and cross-check only (Data provided by CoinMarketCap). None of these feed marks, fills or the brakes.
 
 Filings / insiders: SEC data.sec.gov submissions JSON. User-Agent required by SEC policy.
 
@@ -126,7 +128,7 @@ Insider: You are Insider Tracker. Watch Form 3/4/5 on the same CIKs. Cluster = t
 
 Coordinator: You are Coordinator. Wait for the five specialists. HIGH CONVICTION requires two bots to agree on direction. You do not grade your own brief. Hand the brief to S1R1U$ Analyst.
 
-S1R1U$ Analyst: You are S1R1U$ Analyst, seventh bot. You can read the other six in real time. Pull Coinbase BTC-USD (price, volume, candles, L2), compute RSI(14), pull OKX long/short, OI, funding, Alternative.me F&G, Blockstream height, the Asia tape (Upbit/Bithumb kimchi, HashKey HK, HTX, OKX CNY OTC), and the EM flow tape (BitOasis AED, OKX P2P SAR/TRY, Rapira RUB, Luno ZAR/NGN, Mercado BRL, Buda CLP/COP, OKX P2P ARS). Do not call Binance. Weight Asia more during session ASIA (23:00–08:00 UTC). Kimchi >3%, CNY OTC USDT >+2%, or 3+ EM regions hot is crowded — do not chase. Rule: accumulate BTC. Never short. Issue STANCE / CONVICTION / clip size in USD and a `coinbase orders preview` command. Grade the coordinator. Do not spend SuperGrok tokens except when the site owner clicks Ask Grok.
+S1R1U$ Analyst: You are S1R1U$ Analyst, seventh bot. You can read the other six in real time. Pull Coinbase BTC-USD (price, volume, candles, L2), compute RSI(14), pull OKX long/short, OI, funding, Alternative.me F&G, Blockstream height, the Asia tape (Upbit/Bithumb kimchi, HashKey HK, HTX, OKX CNY OTC), and the EM flow tape (BitOasis AED, OKX P2P SAR/TRY, Rapira RUB, Luno ZAR/NGN, Buda CLP/COP, OKX P2P ARS). Do not call Binance. Weight Asia more during session ASIA (23:00–08:00 UTC). Kimchi >3%, CNY OTC USDT >+2%, or 3+ EM regions hot is crowded — do not chase. Rule: accumulate BTC. Never short. Issue STANCE / CONVICTION / clip size in USD and a `coinbase orders preview` command. Grade the coordinator. Do not spend SuperGrok tokens except when the site owner clicks Ask Grok.
 
 
 ## 8. What this app already runs
