@@ -6,6 +6,7 @@ import { useGm } from "@/lib/desk/gm-store";
 import { GM_NAME } from "@/lib/desk/gm";
 import type { DeskError } from "@/lib/desk/error-log";
 import { MORNING_KEEP, MORNING_TITLE, MORNING_VISIBLE, morningInlineHref, morningPdfName } from "@/lib/desk/morning-lib";
+import { morningPdfBlob } from "@/lib/desk/morning-pdf-auth";
 import { useOperator } from "@/lib/desk/operator";
 import { useDeskTape } from "@/lib/desk/tape-client";
 import { morningAgent, morningBadBots, morningFeeds, morningHtmlLinks, morningPred, morningProblems } from "@/lib/desk/morning-ops";
@@ -28,6 +29,30 @@ type Report = {
   thumbs: string[];
 };
 
+
+async function loadMorningPdfBlob(id: string, token: string): Promise<string | null> {
+  const res = await fetch(morningInlineHref(id), {
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "same-origin",
+  });
+  if (!res.ok) return null;
+  const blob = morningPdfBlob(await res.arrayBuffer(), res.headers.get("content-type"));
+  if (!blob) return null;
+  return URL.createObjectURL(blob);
+}
+
+function openMorningPdfUrl(url: string, filename?: string) {
+  if (filename) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noreferrer";
+    a.click();
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 export function MorningReportPdf({ token: tokenProp, canPauseLibrary = true }: { token?: string | null; canPauseLibrary?: boolean } = {}) {
   const opToken = useOperator((s) => s.token);
   const token = tokenProp ?? opToken;
@@ -38,6 +63,7 @@ export function MorningReportPdf({ token: tokenProp, canPauseLibrary = true }: {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string | "live">("live");
   const [busy, setBusy] = useState(false);
+  const [pdf, setPdf] = useState<{ id: string; url: string } | null>(null);
 
   async function load() {
     if (!token) return;
@@ -73,8 +99,34 @@ export function MorningReportPdf({ token: tokenProp, canPauseLibrary = true }: {
   const src = selected ? thumbs[page - 1] ?? thumbs[0] : null;
   const recent = reports.slice(0, MORNING_VISIBLE);
   const rest = reports.slice(MORNING_VISIBLE, MORNING_KEEP);
-  const inline = selected ? morningInlineHref(selected.id) : null;
   const canDownload = Boolean(selected && recent.some((r) => r.id === selected.id));
+
+  const selectedId = selected?.id;
+  const pdfUrl = pdf && selectedId && pdf.id === selectedId ? pdf.url : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | undefined;
+    if (!token || !selectedId) return;
+    void loadMorningPdfBlob(selectedId, token).then((url) => {
+      if (cancelled) {
+        if (url) URL.revokeObjectURL(url);
+        return;
+      }
+      if (!url) return;
+      objectUrl = url;
+      setPdf({ id: selectedId, url });
+    });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [token, selectedId]);
+
+  function openSelectedPdf(download: boolean) {
+    if (!pdfUrl || !selectedId) return;
+    openMorningPdfUrl(pdfUrl, download ? morningPdfName(selectedId) : undefined);
+  }
 
   return (
     <>
@@ -98,26 +150,25 @@ export function MorningReportPdf({ token: tokenProp, canPauseLibrary = true }: {
           {paused ? "Resume" : "Pause"}
         </button>
         ) : null}
-        {inline ? (
-          <a
-            href={`${inline}#toolbar=1`}
-            target="_blank"
-            rel="noreferrer"
+        {pdfUrl ? (
+          <button
+            type="button"
+            onClick={() => openSelectedPdf(false)}
             className="inline-flex h-11 min-h-11 items-center gap-2 rounded-md border border-rule bg-surface px-4 text-sm font-medium"
           >
             <ExternalLink className="size-4" />
             Open PDF in browser
-          </a>
+          </button>
         ) : null}
-        {canDownload ? (
-          <a
-            href={`${inline}?dl=1`}
-            download={selected ? morningPdfName(selected.id) : undefined}
+        {canDownload && pdfUrl ? (
+          <button
+            type="button"
+            onClick={() => openSelectedPdf(true)}
             className="inline-flex h-11 min-h-11 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-fg"
           >
             <Download className="size-4" />
             Download PDF
-          </a>
+          </button>
         ) : null}
         {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
           <button
@@ -140,10 +191,10 @@ export function MorningReportPdf({ token: tokenProp, canPauseLibrary = true }: {
           className="mt-4 w-full rounded-md border border-rule bg-black"
         />
       ) : null}
-      {inline ? (
+      {pdfUrl ? (
         <iframe
           title={`${MORNING_TITLE} ${selected?.id ?? ""}`}
-          src={`${inline}#toolbar=1&navpanes=0&page=${page}`}
+          src={pdfUrl ? `${pdfUrl}#toolbar=1&navpanes=0&page=${page}` : undefined}
           className="mt-3 h-[70vh] w-full rounded-md border border-rule bg-black"
         />
       ) : null}
@@ -161,6 +212,7 @@ export function MorningReportPdf({ token: tokenProp, canPauseLibrary = true }: {
               report={r}
               on={active === r.id || (active === "live" && i === 0)}
               download
+              token={token}
               onOpen={() => {
                 setActive(r.id);
                 setPage(1);
@@ -187,6 +239,7 @@ export function MorningReportPdf({ token: tokenProp, canPauseLibrary = true }: {
                 report={r}
                 on={active === r.id}
                 download={false}
+                token={token}
                 onOpen={() => {
                   setActive(r.id);
                   setPage(1);
@@ -223,13 +276,21 @@ function LibraryRow({
   on,
   download,
   onOpen,
+  token,
 }: {
   report: Report;
   on: boolean;
   download: boolean;
   onOpen: () => void;
+  token: string | null | undefined;
 }) {
-  const inline = morningInlineHref(report.id);
+  async function openPdf(asDownload: boolean) {
+    if (!token) return;
+    const url = await loadMorningPdfBlob(report.id, token);
+    if (!url) return;
+    openMorningPdfUrl(url, asDownload ? morningPdfName(report.id) : undefined);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
   return (
     <div
       className={cn(
@@ -245,24 +306,25 @@ function LibraryRow({
         </span>
       </button>
       <span className="flex flex-wrap items-center gap-2">
-        <a
-          href={`${inline}#toolbar=1`}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          type="button"
+          onClick={() => void openPdf(false)}
+          disabled={!token}
           className="inline-flex h-9 items-center gap-1 rounded-md border border-rule px-2 font-mono text-[11px] text-tab"
         >
           <ExternalLink className="size-3.5" />
           Browser
-        </a>
+        </button>
         {download ? (
-          <a
-            href={`${inline}?dl=1`}
-            download={morningPdfName(report.id)}
+          <button
+            type="button"
+            onClick={() => void openPdf(true)}
+            disabled={!token}
             className="inline-flex h-9 items-center gap-1 rounded-md border border-rule px-2 font-mono text-[11px] text-tab"
           >
             <Download className="size-3.5" />
             PDF
-          </a>
+          </button>
         ) : null}
       </span>
     </div>
