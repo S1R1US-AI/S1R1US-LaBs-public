@@ -18,6 +18,8 @@ import {
   type TransactionSettings,
 } from "kysely";
 
+import { transactionBeginSql } from "./pglite-isolation";
+
 type Client = PGlite;
 
 /** Factory used by `auth/server.ts`: `pgliteDialect(() => getPglite())`. */
@@ -74,15 +76,7 @@ class LazyPGliteDriver implements Driver {
     settings: TransactionSettings,
   ): Promise<void> {
     const c = conn as PGliteConnection;
-    if (settings.isolationLevel) {
-      await c.executeQuery(
-        CompiledQuery.raw(
-          `start transaction isolation level ${settings.isolationLevel}`,
-        ),
-      );
-    } else {
-      await c.executeQuery(CompiledQuery.raw("begin"));
-    }
+    await c.executeQuery(CompiledQuery.raw(transactionBeginSql(settings.isolationLevel)));
   }
 
   async commitTransaction(conn: DatabaseConnection): Promise<void> {
